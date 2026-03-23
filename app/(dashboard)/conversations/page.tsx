@@ -27,6 +27,8 @@ interface Conversation {
   last_message_at: string;
   last_message_text?: string;
   last_message_direction?: string;
+  last_message_status?: string;
+  last_message_sender_type?: 'customer' | 'bot' | 'agent' | 'unknown' | null;
 }
 
 type LeadStatus = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'CLOSED';
@@ -58,9 +60,50 @@ function getNextLeadAction(status: LeadStatus | null): { label: string; next: Le
   return { label: 'Marcar Contactado', next: 'CONTACTED' };
 }
 
-function requiresAttentionFromDirection(direction?: string | null): boolean {
-  const normalized = String(direction || '').toLowerCase();
-  return normalized === 'inbound' || normalized === 'incoming';
+type LastMessageActor = 'customer' | 'bot' | 'agent' | 'unknown';
+type AttentionLevel = 'customer' | 'bot' | null;
+
+function classifyLastMessageActor(params: {
+  senderType?: string | null;
+  status?: string | null;
+  direction?: string | null;
+  conversationStatus?: Conversation['status'] | null;
+}): LastMessageActor {
+  const senderType = String(params.senderType || '').toLowerCase();
+  if (senderType === 'customer' || senderType === 'bot' || senderType === 'agent') {
+    return senderType;
+  }
+
+  const status = String(params.status || '').toLowerCase();
+  if (status.startsWith('agent_')) return 'agent';
+
+  const direction = String(params.direction || '').toLowerCase();
+  if (direction === 'inbound' || direction === 'incoming') return 'customer';
+  if (direction === 'outgoing') return 'agent';
+  if (direction === 'outbound' && params.conversationStatus === 'bot') return 'bot';
+
+  return 'unknown';
+}
+
+function getAttentionLevelFromLastMessage(params: {
+  senderType?: string | null;
+  status?: string | null;
+  direction?: string | null;
+  conversationStatus?: Conversation['status'] | null;
+}): AttentionLevel {
+  const actor = classifyLastMessageActor(params);
+  if (actor === 'customer') return 'customer';
+  if (actor === 'bot') return 'bot';
+  return null;
+}
+
+function requiresAttentionFromLastMessage(params: {
+  senderType?: string | null;
+  status?: string | null;
+  direction?: string | null;
+  conversationStatus?: Conversation['status'] | null;
+}): boolean {
+  return getAttentionLevelFromLastMessage(params) !== null;
 }
 
 function toTimestamp(value?: string | null): number {
@@ -236,7 +279,28 @@ export default function ConversationsPage() {
           }
 
           const nextConversations = enrichConversationsWithLeads(rawConversations, nextLeadLookup);
-          setConversations(nextConversations);
+          setConversations((prev) => {
+            const prevById = new Map(prev.map((item) => [item.id, item]));
+
+            return nextConversations.map((conv) => {
+              const previous = prevById.get(conv.id);
+              if (!previous) return conv;
+
+              // Preserve known sender/status metadata when the same last message timestamp remains.
+              // Some endpoints may omit or format message text differently, so text comparison is unstable.
+              const sameLastMessage =
+                toTimestamp(previous.last_message_at) > 0
+                && toTimestamp(previous.last_message_at) === toTimestamp(conv.last_message_at);
+
+              if (!sameLastMessage) return conv;
+
+              return {
+                ...conv,
+                last_message_status: conv.last_message_status || previous.last_message_status,
+                last_message_sender_type: conv.last_message_sender_type || previous.last_message_sender_type
+              };
+            });
+          });
 
           const initialPreview: Record<string, string> = {};
           nextConversations.forEach((conv: Conversation) => {
@@ -292,7 +356,7 @@ export default function ConversationsPage() {
 
     const intervalId = setInterval(() => {
       fetchConversations();
-    }, 3000);
+    }, 5000);
 
     return () => clearInterval(intervalId);
   }, [authLoading]);
@@ -368,7 +432,9 @@ export default function ConversationsPage() {
                     ...conv,
                     last_message_text: last.text,
                     last_message_at: last.created_at || conv.last_message_at,
-                    last_message_direction: last.direction || conv.last_message_direction
+                    last_message_direction: last.direction || conv.last_message_direction,
+                    last_message_status: last.status || conv.last_message_status,
+                    last_message_sender_type: last.senderType || conv.last_message_sender_type
                   }
                 : conv
             )
@@ -377,7 +443,7 @@ export default function ConversationsPage() {
       } catch {
         // Silent in background polling
       }
-    }, 4000);
+    }, 5000);
 
     return () => clearInterval(intervalId);
   }, [selectedConversationId]);
@@ -403,6 +469,8 @@ export default function ConversationsPage() {
           text: response.message.message_text || response.message.body,
           fromMe: true,
           senderType: 'agent',
+          direction: response.message.direction || 'outgoing',
+          status: response.message.status || 'agent_sent',
           created_at: response.message.created_at
         };
 
@@ -419,7 +487,9 @@ export default function ConversationsPage() {
                   status: 'active',
                   last_message_text: sentMessage.text,
                   last_message_at: sentMessage.created_at || conv.last_message_at,
-                  last_message_direction: response.message.direction || 'outgoing'
+                    last_message_direction: sentMessage.direction || 'outgoing',
+                    last_message_status: sentMessage.status || 'agent_sent',
+                    last_message_sender_type: 'agent'
                 }
               : conv
           )
@@ -452,20 +522,43 @@ export default function ConversationsPage() {
     || selectedConversationFallbackLead?.status
     || null;
   const selectedMessages = selectedConversationId ? messagesByConversation[selectedConversationId] || [] : [];
-  const selectedNeedsAttention = requiresAttentionFromDirection(selectedConversation?.last_message_direction);
+  const selectedAttentionLevel = getAttentionLevelFromLastMessage({
+    senderType: selectedConversation?.last_message_sender_type,
+    status: selectedConversation?.last_message_status,
+    direction: selectedConversation?.last_message_direction,
+    conversationStatus: selectedConversation?.status
+  });
+  const selectedNeedsAttention = selectedAttentionLevel !== null;
 
   const prioritizedConversations = useMemo(() => {
     return [...conversations].sort((a, b) => {
-      const aAttention = requiresAttentionFromDirection(a.last_message_direction) ? 1 : 0;
-      const bAttention = requiresAttentionFromDirection(b.last_message_direction) ? 1 : 0;
+      const aAttention = requiresAttentionFromLastMessage({
+        senderType: a.last_message_sender_type,
+        status: a.last_message_status,
+        direction: a.last_message_direction,
+        conversationStatus: a.status
+      }) ? 1 : 0;
+      const bAttention = requiresAttentionFromLastMessage({
+        senderType: b.last_message_sender_type,
+        status: b.last_message_status,
+        direction: b.last_message_direction,
+        conversationStatus: b.status
+      }) ? 1 : 0;
       if (aAttention !== bAttention) return bAttention - aAttention;
 
-      return toTimestamp(b.last_message_at) - toTimestamp(a.last_message_at);
+      const tsDiff = toTimestamp(b.last_message_at) - toTimestamp(a.last_message_at);
+      if (tsDiff !== 0) return tsDiff;
+      return a.id.localeCompare(b.id);
     });
   }, [conversations]);
 
   const attentionCount = useMemo(
-    () => conversations.filter((conv) => requiresAttentionFromDirection(conv.last_message_direction)).length,
+    () => conversations.filter((conv) => requiresAttentionFromLastMessage({
+      senderType: conv.last_message_sender_type,
+      status: conv.last_message_status,
+      direction: conv.last_message_direction,
+      conversationStatus: conv.status
+    })).length,
     [conversations]
   );
 
@@ -626,46 +719,63 @@ export default function ConversationsPage() {
         {/* Conversations List */}
         <div className="flex-1 overflow-y-auto">
           {prioritizedConversations.map((conv) => (
-            <button
-              key={conv.id}
-              onClick={() => handleSelectConversation(conv.id)}
-              className={`w-full border-b border-border/50 p-4 text-left transition-colors hover:bg-muted/50 ${
-                selectedConversationId === conv.id ? 'bg-background' : ''
-              } ${
-                highlightedConversationId === conv.id ? 'bg-amber-50' : ''
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-foreground">{conv.lead_name || conv.user_phone}</p>
-                    {requiresAttentionFromDirection(conv.last_message_direction) && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
-                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                        Requiere respuesta
-                      </span>
-                    )}
+            (() => {
+              const attentionLevel = getAttentionLevelFromLastMessage({
+                senderType: conv.last_message_sender_type,
+                status: conv.last_message_status,
+                direction: conv.last_message_direction,
+                conversationStatus: conv.status
+              });
+
+              return (
+                <button
+                  key={conv.id}
+                  onClick={() => handleSelectConversation(conv.id)}
+                  className={`w-full border-b border-border/50 p-4 text-left transition-colors hover:bg-muted/50 ${
+                    selectedConversationId === conv.id ? 'bg-background' : ''
+                  } ${
+                    highlightedConversationId === conv.id ? 'bg-amber-50' : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-foreground">{conv.lead_name || conv.user_phone}</p>
+                        {attentionLevel === 'customer' && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                            Cliente espera
+                          </span>
+                        )}
+                        {attentionLevel === 'bot' && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                            Falta agente
+                          </span>
+                        )}
+                      </div>
+                      {conv.lead_name && (
+                        <p className="truncate text-xs text-muted-foreground">{conv.user_phone}</p>
+                      )}
+                      <p className="truncate text-sm text-muted-foreground">
+                        {messagesByConversation[conv.id]?.[messagesByConversation[conv.id].length - 1]?.text
+                          || previewByConversation[conv.id]
+                          || conv.last_message_text
+                          || 'Sin mensajes'}
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground whitespace-nowrap">
+                      {formatTime(conv.last_message_at)}
+                    </p>
                   </div>
-                  {conv.lead_name && (
-                    <p className="truncate text-xs text-muted-foreground">{conv.user_phone}</p>
-                  )}
-                  <p className="truncate text-sm text-muted-foreground">
-                    {messagesByConversation[conv.id]?.[messagesByConversation[conv.id].length - 1]?.text
-                      || previewByConversation[conv.id]
-                      || conv.last_message_text
-                      || 'Sin mensajes'}
-                  </p>
-                </div>
-                <p className="text-xs text-muted-foreground whitespace-nowrap">
-                  {formatTime(conv.last_message_at)}
-                </p>
-              </div>
-              <div className="mt-2">
-                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(conv.status)}`}>
-                  {getStatusLabel(conv.status)}
-                </span>
-              </div>
-            </button>
+                  <div className="mt-2">
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(conv.status)}`}>
+                      {getStatusLabel(conv.status)}
+                    </span>
+                  </div>
+                </button>
+              );
+            })()
           ))}
         </div>
       </div>
@@ -690,10 +800,20 @@ export default function ConversationsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {selectedNeedsAttention && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                      Cliente espera respuesta
-                    </span>
+                    <>
+                      {selectedAttentionLevel === 'customer' && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                          Cliente espera respuesta
+                        </span>
+                      )}
+                      {selectedAttentionLevel === 'bot' && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                          Bot respondio, falta agente
+                        </span>
+                      )}
+                    </>
                   )}
                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(selectedConversation?.status || 'bot')}`}>
                     {getStatusLabel((selectedConversation?.status || 'bot') as Conversation['status'])}

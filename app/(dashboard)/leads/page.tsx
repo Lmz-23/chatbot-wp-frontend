@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiClient } from '@/lib/api/apiClient';
 
 type LeadStatus = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'CLOSED';
@@ -19,9 +19,15 @@ interface Lead {
 interface ConversationSummary {
   id: string;
   lead_id?: string | null;
+  status?: 'bot' | 'active' | 'closed';
+  last_message_sender_type?: 'customer' | 'bot' | 'agent' | 'unknown' | null;
+  last_message_status?: string | null;
   last_message_direction?: string;
   last_message_at?: string;
 }
+
+type LastMessageActor = 'customer' | 'bot' | 'agent' | 'unknown';
+type AttentionLevel = 'customer' | 'bot' | null;
 
 const STATUS_OPTIONS: LeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED', 'CLOSED'];
 
@@ -46,9 +52,38 @@ function getNextLeadAction(status: LeadStatus): { label: string; next: LeadStatu
   return { label: 'Reabrir', next: 'CONTACTED' };
 }
 
-function requiresAttentionFromDirection(direction?: string | null): boolean {
-  const normalized = String(direction || '').toLowerCase();
-  return normalized === 'inbound' || normalized === 'incoming';
+function classifyLastMessageActor(params: {
+  senderType?: string | null;
+  status?: string | null;
+  direction?: string | null;
+  conversationStatus?: ConversationSummary['status'] | null;
+}): LastMessageActor {
+  const senderType = String(params.senderType || '').toLowerCase();
+  if (senderType === 'customer' || senderType === 'bot' || senderType === 'agent') {
+    return senderType;
+  }
+
+  const status = String(params.status || '').toLowerCase();
+  if (status.startsWith('agent_')) return 'agent';
+
+  const direction = String(params.direction || '').toLowerCase();
+  if (direction === 'inbound' || direction === 'incoming') return 'customer';
+  if (direction === 'outgoing') return 'agent';
+  if (direction === 'outbound' && params.conversationStatus === 'bot') return 'bot';
+
+  return 'unknown';
+}
+
+function getAttentionLevelFromLastMessage(params: {
+  senderType?: string | null;
+  status?: string | null;
+  direction?: string | null;
+  conversationStatus?: ConversationSummary['status'] | null;
+}): AttentionLevel {
+  const actor = classifyLastMessageActor(params);
+  if (actor === 'customer') return 'customer';
+  if (actor === 'bot') return 'bot';
+  return null;
 }
 
 function toTimestamp(value?: string | null): number {
@@ -71,6 +106,7 @@ function formatDate(dateString?: string): string {
 }
 
 export default function LeadsPage() {
+  const hasLoadedRef = useRef(false);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +116,7 @@ export default function LeadsPage() {
   const [nameDraftByLead, setNameDraftByLead] = useState<Record<string, string>>({});
   const [onlyPending, setOnlyPending] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [attentionByLeadId, setAttentionByLeadId] = useState<Record<string, boolean>>({});
+  const [attentionByLeadId, setAttentionByLeadId] = useState<Record<string, AttentionLevel>>({});
 
   const leadsById = useMemo(() => {
     const map: Record<string, Lead> = {};
@@ -89,8 +125,11 @@ export default function LeadsPage() {
   }, [leads]);
 
   const fetchLeads = async () => {
+    const isInitialLoad = !hasLoadedRef.current;
     try {
-      setLoading(true);
+      if (isInitialLoad) {
+        setLoading(true);
+      }
       setError(null);
       const [leadsResponse, conversationsResponse] = await Promise.all([
         apiClient('/business/leads'),
@@ -105,11 +144,13 @@ export default function LeadsPage() {
       const nextLeads: Lead[] = leadsResponse.leads || [];
       setLeads(nextLeads);
 
-      const nextDrafts: Record<string, string> = {};
-      for (const lead of nextLeads) {
-        nextDrafts[lead.id] = lead.name || '';
+      if (isInitialLoad) {
+        const nextDrafts: Record<string, string> = {};
+        for (const lead of nextLeads) {
+          nextDrafts[lead.id] = lead.name || '';
+        }
+        setNameDraftByLead(nextDrafts);
       }
-      setNameDraftByLead(nextDrafts);
 
       const rawConversations: ConversationSummary[] =
         conversationsResponse && conversationsResponse.ok
@@ -125,23 +166,37 @@ export default function LeadsPage() {
         }
       }
 
-      const nextAttentionByLeadId: Record<string, boolean> = {};
+      const nextAttentionByLeadId: Record<string, AttentionLevel> = {};
       for (const leadId of Object.keys(latestByLeadId)) {
-        nextAttentionByLeadId[leadId] = requiresAttentionFromDirection(
-          latestByLeadId[leadId].last_message_direction
-        );
+        const latest = latestByLeadId[leadId];
+        nextAttentionByLeadId[leadId] = getAttentionLevelFromLastMessage({
+          senderType: latest.last_message_sender_type,
+          status: latest.last_message_status,
+          direction: latest.last_message_direction,
+          conversationStatus: latest.status
+        });
       }
       setAttentionByLeadId(nextAttentionByLeadId);
     } catch (err) {
       console.error('fetch leads error:', err);
       setError('Error al cargar leads');
     } finally {
-      setLoading(false);
+      if (isInitialLoad) {
+        setLoading(false);
+        hasLoadedRef.current = true;
+      }
     }
   };
 
   useEffect(() => {
     fetchLeads();
+
+    // Poll every 5 seconds to reduce noise while keeping timely updates
+    const intervalId = setInterval(() => {
+      fetchLeads();
+    }, 5000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const patchLead = async (
@@ -254,7 +309,8 @@ export default function LeadsPage() {
 
         const aTs = toTimestamp(a.last_interaction_at || a.updated_at || a.created_at);
         const bTs = toTimestamp(b.last_interaction_at || b.updated_at || b.created_at);
-        return bTs - aTs;
+        if (aTs !== bTs) return bTs - aTs;
+        return a.id.localeCompare(b.id);
       });
     }
 
@@ -328,6 +384,7 @@ export default function LeadsPage() {
                 ) : (
                   groupedLeads[status].map((lead) => {
                     const nextAction = getNextLeadAction(lead.status);
+                    const attentionLevel = attentionByLeadId[lead.id];
 
                     return (
                       <article
@@ -347,10 +404,16 @@ export default function LeadsPage() {
                             <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(lead.status)}`}>
                               {lead.status}
                             </span>
-                            {attentionByLeadId[lead.id] && (
+                            {attentionLevel === 'customer' && (
                               <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
                                 <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                                Requiere respuesta
+                                Cliente espera
+                              </span>
+                            )}
+                            {attentionLevel === 'bot' && (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                Falta agente
                               </span>
                             )}
                             <button
