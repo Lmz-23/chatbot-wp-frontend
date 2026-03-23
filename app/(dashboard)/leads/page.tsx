@@ -16,6 +16,13 @@ interface Lead {
   last_interaction_at: string;
 }
 
+interface ConversationSummary {
+  id: string;
+  lead_id?: string | null;
+  last_message_direction?: string;
+  last_message_at?: string;
+}
+
 const STATUS_OPTIONS: LeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED', 'CLOSED'];
 
 const STATUS_TITLES: Record<LeadStatus, string> = {
@@ -37,6 +44,17 @@ function getNextLeadAction(status: LeadStatus): { label: string; next: LeadStatu
   if (status === 'CONTACTED') return { label: 'Calificar', next: 'QUALIFIED' };
   if (status === 'QUALIFIED') return { label: 'Cerrar', next: 'CLOSED' };
   return { label: 'Reabrir', next: 'CONTACTED' };
+}
+
+function requiresAttentionFromDirection(direction?: string | null): boolean {
+  const normalized = String(direction || '').toLowerCase();
+  return normalized === 'inbound' || normalized === 'incoming';
+}
+
+function toTimestamp(value?: string | null): number {
+  if (!value) return 0;
+  const ts = new Date(value).getTime();
+  return Number.isNaN(ts) ? 0 : ts;
 }
 
 function formatDate(dateString?: string): string {
@@ -62,6 +80,7 @@ export default function LeadsPage() {
   const [nameDraftByLead, setNameDraftByLead] = useState<Record<string, string>>({});
   const [onlyPending, setOnlyPending] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [attentionByLeadId, setAttentionByLeadId] = useState<Record<string, boolean>>({});
 
   const leadsById = useMemo(() => {
     const map: Record<string, Lead> = {};
@@ -73,13 +92,17 @@ export default function LeadsPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient('/business/leads');
-      if (!response || !response.ok) {
+      const [leadsResponse, conversationsResponse] = await Promise.all([
+        apiClient('/business/leads'),
+        apiClient('/business/conversations')
+      ]);
+
+      if (!leadsResponse || !leadsResponse.ok) {
         setError('No se pudieron cargar los leads');
         return;
       }
 
-      const nextLeads: Lead[] = response.leads || [];
+      const nextLeads: Lead[] = leadsResponse.leads || [];
       setLeads(nextLeads);
 
       const nextDrafts: Record<string, string> = {};
@@ -87,6 +110,28 @@ export default function LeadsPage() {
         nextDrafts[lead.id] = lead.name || '';
       }
       setNameDraftByLead(nextDrafts);
+
+      const rawConversations: ConversationSummary[] =
+        conversationsResponse && conversationsResponse.ok
+          ? (conversationsResponse.conversations || [])
+          : [];
+
+      const latestByLeadId: Record<string, ConversationSummary> = {};
+      for (const conv of rawConversations) {
+        if (!conv.lead_id) continue;
+        const existing = latestByLeadId[conv.lead_id];
+        if (!existing || toTimestamp(conv.last_message_at) > toTimestamp(existing.last_message_at)) {
+          latestByLeadId[conv.lead_id] = conv;
+        }
+      }
+
+      const nextAttentionByLeadId: Record<string, boolean> = {};
+      for (const leadId of Object.keys(latestByLeadId)) {
+        nextAttentionByLeadId[leadId] = requiresAttentionFromDirection(
+          latestByLeadId[leadId].last_message_direction
+        );
+      }
+      setAttentionByLeadId(nextAttentionByLeadId);
     } catch (err) {
       console.error('fetch leads error:', err);
       setError('Error al cargar leads');
@@ -203,14 +248,18 @@ export default function LeadsPage() {
 
     for (const status of STATUS_OPTIONS) {
       grouped[status].sort((a, b) => {
-        const aTs = new Date(a.last_interaction_at || a.updated_at || a.created_at).getTime();
-        const bTs = new Date(b.last_interaction_at || b.updated_at || b.created_at).getTime();
-        return aTs - bTs;
+        const aAttention = attentionByLeadId[a.id] ? 1 : 0;
+        const bAttention = attentionByLeadId[b.id] ? 1 : 0;
+        if (aAttention !== bAttention) return bAttention - aAttention;
+
+        const aTs = toTimestamp(a.last_interaction_at || a.updated_at || a.created_at);
+        const bTs = toTimestamp(b.last_interaction_at || b.updated_at || b.created_at);
+        return bTs - aTs;
       });
     }
 
     return grouped;
-  }, [filteredLeads]);
+  }, [attentionByLeadId, filteredLeads]);
 
   if (loading) {
     return <div className="p-6">Cargando leads...</div>;
@@ -298,6 +347,12 @@ export default function LeadsPage() {
                             <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(lead.status)}`}>
                               {lead.status}
                             </span>
+                            {attentionByLeadId[lead.id] && (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                                Requiere respuesta
+                              </span>
+                            )}
                             <button
                               type="button"
                               onClick={() => handleStatusChange(lead.id, nextAction.next)}

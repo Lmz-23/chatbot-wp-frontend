@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks';
 import { apiClient } from '@/lib/api/apiClient';
 
@@ -56,6 +56,17 @@ function getNextLeadAction(status: LeadStatus | null): { label: string; next: Le
   if (status === 'QUALIFIED') return { label: 'Cerrar Lead', next: 'CLOSED' };
   if (status === 'CLOSED') return { label: 'Reabrir Lead', next: 'CONTACTED' };
   return { label: 'Marcar Contactado', next: 'CONTACTED' };
+}
+
+function requiresAttentionFromDirection(direction?: string | null): boolean {
+  const normalized = String(direction || '').toLowerCase();
+  return normalized === 'inbound' || normalized === 'incoming';
+}
+
+function toTimestamp(value?: string | null): number {
+  if (!value) return 0;
+  const ts = new Date(value).getTime();
+  return Number.isNaN(ts) ? 0 : ts;
 }
 
 // Simple time formatter (HH:MM)
@@ -356,7 +367,8 @@ export default function ConversationsPage() {
                 ? {
                     ...conv,
                     last_message_text: last.text,
-                    last_message_at: last.created_at || conv.last_message_at
+                    last_message_at: last.created_at || conv.last_message_at,
+                    last_message_direction: last.direction || conv.last_message_direction
                   }
                 : conv
             )
@@ -406,7 +418,8 @@ export default function ConversationsPage() {
                   ...conv,
                   status: 'active',
                   last_message_text: sentMessage.text,
-                  last_message_at: sentMessage.created_at || conv.last_message_at
+                  last_message_at: sentMessage.created_at || conv.last_message_at,
+                  last_message_direction: response.message.direction || 'outgoing'
                 }
               : conv
           )
@@ -439,6 +452,22 @@ export default function ConversationsPage() {
     || selectedConversationFallbackLead?.status
     || null;
   const selectedMessages = selectedConversationId ? messagesByConversation[selectedConversationId] || [] : [];
+  const selectedNeedsAttention = requiresAttentionFromDirection(selectedConversation?.last_message_direction);
+
+  const prioritizedConversations = useMemo(() => {
+    return [...conversations].sort((a, b) => {
+      const aAttention = requiresAttentionFromDirection(a.last_message_direction) ? 1 : 0;
+      const bAttention = requiresAttentionFromDirection(b.last_message_direction) ? 1 : 0;
+      if (aAttention !== bAttention) return bAttention - aAttention;
+
+      return toTimestamp(b.last_message_at) - toTimestamp(a.last_message_at);
+    });
+  }, [conversations]);
+
+  const attentionCount = useMemo(
+    () => conversations.filter((conv) => requiresAttentionFromDirection(conv.last_message_direction)).length,
+    [conversations]
+  );
 
   const handleLeadStatusChange = async (nextStatus: LeadStatus) => {
     if (!selectedConversationId || !selectedLeadId) return;
@@ -565,6 +594,9 @@ export default function ConversationsPage() {
         <div className="border-b border-border bg-card p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-xl font-semibold">Conversations</h2>
+            <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+              {attentionCount} por responder
+            </span>
             <Link
               href="/"
               className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground hover:bg-muted"
@@ -593,7 +625,7 @@ export default function ConversationsPage() {
 
         {/* Conversations List */}
         <div className="flex-1 overflow-y-auto">
-          {conversations.map((conv) => (
+          {prioritizedConversations.map((conv) => (
             <button
               key={conv.id}
               onClick={() => handleSelectConversation(conv.id)}
@@ -605,7 +637,15 @@ export default function ConversationsPage() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-foreground">{conv.lead_name || conv.user_phone}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-foreground">{conv.lead_name || conv.user_phone}</p>
+                    {requiresAttentionFromDirection(conv.last_message_direction) && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                        Requiere respuesta
+                      </span>
+                    )}
+                  </div>
                   {conv.lead_name && (
                     <p className="truncate text-xs text-muted-foreground">{conv.user_phone}</p>
                   )}
@@ -649,6 +689,12 @@ export default function ConversationsPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {selectedNeedsAttention && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                      Cliente espera respuesta
+                    </span>
+                  )}
                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(selectedConversation?.status || 'bot')}`}>
                     {getStatusLabel((selectedConversation?.status || 'bot') as Conversation['status'])}
                   </span>
