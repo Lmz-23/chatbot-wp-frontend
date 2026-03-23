@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useAuth } from '@/hooks';
 
 export default function TestAuthPage() {
@@ -7,7 +8,12 @@ export default function TestAuthPage() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'monospace', maxWidth: '600px' }}>
-      <h1>Test Auth Hook</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <h1 style={{ margin: 0 }}>Test Auth Hook</h1>
+        <Link href="/" style={{ border: '1px solid #ccc', borderRadius: '4px', padding: '6px 10px', textDecoration: 'none', color: '#111' }}>
+          Inicio
+        </Link>
+      </div>
       
       <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
         <p><strong>Loading:</strong> {String(loading)}</p>

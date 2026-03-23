@@ -1,0 +1,718 @@
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
+import { useAuth } from '@/hooks';
+import { apiClient } from '@/lib/api/apiClient';
+
+interface Message {
+  id: string;
+  text: string;
+  fromMe: boolean;
+  senderType: 'customer' | 'bot' | 'agent' | 'unknown';
+  direction?: string;
+  status?: string;
+  from_number?: string;
+  to_number?: string;
+  created_at?: string;
+}
+
+interface Conversation {
+  id: string;
+  user_phone: string;
+  lead_id?: string | null;
+  lead_name?: string | null;
+  lead_status?: 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'CLOSED' | null;
+  status: 'bot' | 'active' | 'closed';
+  last_message_at: string;
+  last_message_text?: string;
+  last_message_direction?: string;
+}
+
+type LeadStatus = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'CLOSED';
+
+interface LeadLookupItem {
+  id: string;
+  name?: string | null;
+  status?: LeadStatus | null;
+}
+
+const LEAD_STATUS_OPTIONS: LeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED', 'CLOSED'];
+
+// Simple time formatter (HH:MM)
+const formatTime = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+};
+
+const normalizePhone = (value?: string): string => {
+  if (!value) return '';
+  return String(value).replace(/\D/g, '');
+};
+
+const toLeadPhoneKey = (value?: string): string => {
+  const digits = normalizePhone(value);
+  // WhatsApp numbers can appear as 52XXXXXXXXXX or 521XXXXXXXXXX.
+  if (/^521\d{10}$/.test(digits)) {
+    return `52${digits.slice(3)}`;
+  }
+  return digits;
+};
+
+const inferSenderType = (
+  apiMsg: any,
+  conversationPhone?: string
+): 'customer' | 'bot' | 'agent' | 'unknown' => {
+  const explicit = apiMsg.sender_type;
+  if (explicit === 'customer' || explicit === 'bot' || explicit === 'agent' || explicit === 'unknown') {
+    return explicit;
+  }
+
+  const direction = String(apiMsg.direction || '').toLowerCase();
+  const status = String(apiMsg.status || '').toLowerCase();
+
+  if (status.startsWith('agent_')) return 'agent';
+  if (direction === 'inbound' || direction === 'incoming') return 'customer';
+  if (direction === 'outgoing') return 'agent';
+  if (direction === 'outbound') return 'bot';
+
+  const msgFrom = normalizePhone(apiMsg.from_number);
+  const msgTo = normalizePhone(apiMsg.to_number);
+  const convPhone = normalizePhone(conversationPhone);
+
+  if (convPhone && msgFrom && msgFrom === convPhone) return 'customer';
+  if (convPhone && msgTo && msgTo === convPhone) return 'bot';
+
+  return 'unknown';
+};
+
+const getStatusLabel = (status: Conversation['status']): string => {
+  if (status === 'bot') return 'Bot';
+  if (status === 'active') return 'Activo';
+  return 'Cerrado';
+};
+
+const getStatusClasses = (status: Conversation['status']): string => {
+  if (status === 'bot') return 'bg-blue-100 text-blue-700 border-blue-200';
+  if (status === 'active') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+  return 'bg-zinc-100 text-zinc-700 border-zinc-200';
+};
+
+// Transform API message to UI format
+const transformApiMessage = (apiMsg: any, conversationPhone?: string): Message => {
+  const senderType = inferSenderType(apiMsg, conversationPhone);
+  const fromMe = senderType === 'bot' || senderType === 'agent';
+
+  return {
+    id: apiMsg.id,
+    text: apiMsg.message_text || apiMsg.body,
+    fromMe,
+    senderType,
+    direction: apiMsg.direction,
+    status: apiMsg.status,
+    from_number: apiMsg.from_number,
+    to_number: apiMsg.to_number,
+    created_at: apiMsg.created_at
+  };
+};
+
+export default function ConversationsPage() {
+  const { loading: authLoading } = useAuth();
+  const hasLoadedConversationsRef = useRef(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [messagesByConversation, setMessagesByConversation] = useState<Record<string, Message[]>>({});
+  const [previewByConversation, setPreviewByConversation] = useState<Record<string, string>>({});
+  const [draftMessage, setDraftMessage] = useState('');
+  const [loadingConversations, setLoadingConversations] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [leadLookupByPhone, setLeadLookupByPhone] = useState<Record<string, LeadLookupItem>>({});
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const getConversationById = (conversationId: string) =>
+    conversations.find((c) => c.id === conversationId);
+
+  const fetchMessages = async (conversationId: string) => {
+    const response = await apiClient(`/business/conversations/${conversationId}/messages`);
+    if (!response || !response.ok) return [] as Message[];
+
+    const conversation = getConversationById(conversationId);
+    const apiMessages = response.messages || [];
+    const transformedMessages = apiMessages.map((msg: any) =>
+      transformApiMessage(msg, conversation?.user_phone)
+    );
+
+    return transformedMessages;
+  };
+
+  const enrichConversationsWithLeads = (
+    nextConversations: Conversation[],
+    nextLeadLookup: Record<string, LeadLookupItem>
+  ): Conversation[] => {
+    return nextConversations.map((conv) => {
+      const fallbackLead = nextLeadLookup[toLeadPhoneKey(conv.user_phone)];
+      if (!fallbackLead) return conv;
+
+      return {
+        ...conv,
+        lead_id: conv.lead_id ?? fallbackLead.id,
+        lead_name: conv.lead_name ?? fallbackLead.name ?? null,
+        lead_status: conv.lead_status ?? fallbackLead.status ?? null
+      };
+    });
+  };
+
+  // Fetch conversations on mount
+  useEffect(() => {
+    if (authLoading) return;
+
+    const fetchConversations = async () => {
+      const isInitialLoad = !hasLoadedConversationsRef.current;
+      try {
+        if (isInitialLoad) {
+          setLoadingConversations(true);
+        }
+        const [conversationsResponse, leadsResponse] = await Promise.all([
+          apiClient('/business/conversations'),
+          apiClient('/business/leads')
+        ]);
+
+        if (conversationsResponse && conversationsResponse.ok) {
+          const rawConversations = conversationsResponse.conversations || [];
+
+          let nextLeadLookup: Record<string, LeadLookupItem> = leadLookupByPhone;
+          if (leadsResponse && leadsResponse.ok && Array.isArray(leadsResponse.leads)) {
+            nextLeadLookup = leadsResponse.leads.reduce((acc: Record<string, LeadLookupItem>, lead: any) => {
+              const key = toLeadPhoneKey(lead.phone);
+              if (!key || !lead.id) return acc;
+
+              acc[key] = {
+                id: lead.id,
+                name: lead.name ?? null,
+                status: lead.status ?? null
+              };
+              return acc;
+            }, {});
+            setLeadLookupByPhone(nextLeadLookup);
+          }
+
+          const nextConversations = enrichConversationsWithLeads(rawConversations, nextLeadLookup);
+          setConversations(nextConversations);
+
+          const initialPreview: Record<string, string> = {};
+          nextConversations.forEach((conv: Conversation) => {
+            if (conv.last_message_text) {
+              initialPreview[conv.id] = conv.last_message_text;
+            }
+          });
+          setPreviewByConversation(initialPreview);
+
+          // Backfill preview from messages endpoint for conversations without last_message_text.
+          const missingPreviewConversations = nextConversations.filter(
+            (conv: Conversation) => !conv.last_message_text
+          );
+
+          if (missingPreviewConversations.length > 0) {
+            Promise.all(
+              missingPreviewConversations.map(async (conv: Conversation) => {
+                try {
+                  const messages = await fetchMessages(conv.id);
+                  const last = messages[messages.length - 1];
+                  return { id: conv.id, text: last?.text || '' };
+                } catch {
+                  return { id: conv.id, text: '' };
+                }
+              })
+            ).then((previewList) => {
+              setPreviewByConversation((prev) => {
+                const next = { ...prev };
+                previewList.forEach((item) => {
+                  if (item.text) next[item.id] = item.text;
+                });
+                return next;
+              });
+            });
+          }
+        } else {
+          setError('No se pudieron cargar las conversaciones');
+        }
+      } catch (err) {
+        if (isInitialLoad) {
+          setError('Error al cargar conversaciones');
+        }
+        console.error('fetch conversations error:', err);
+      } finally {
+        if (isInitialLoad) {
+          setLoadingConversations(false);
+          hasLoadedConversationsRef.current = true;
+        }
+      }
+    };
+
+    fetchConversations();
+
+    const intervalId = setInterval(() => {
+      fetchConversations();
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [authLoading]);
+
+  // Auto-scroll to bottom of messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [selectedConversationId, messagesByConversation]);
+
+  // Handle conversation selection - load real messages
+  const handleSelectConversation = async (conversationId: string) => {
+    setSelectedConversationId(conversationId);
+
+    setLoadingMessages(true);
+    try {
+      const transformedMessages = await fetchMessages(conversationId);
+      setMessagesByConversation((prev) => ({
+        ...prev,
+        [conversationId]: transformedMessages
+      }));
+
+      const last = transformedMessages[transformedMessages.length - 1];
+      if (last?.text) {
+        setPreviewByConversation((prev) => ({
+          ...prev,
+          [conversationId]: last.text
+        }));
+      }
+    } catch (err) {
+      console.error('fetch messages error:', err);
+      setError('Error al cargar mensajes');
+      setMessagesByConversation((prev) => ({
+        ...prev,
+        [conversationId]: []
+      }));
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  // Realtime refresh for selected conversation (polling).
+  useEffect(() => {
+    if (!selectedConversationId) return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const latestMessages = await fetchMessages(selectedConversationId);
+        setMessagesByConversation((prev) => {
+          const previous = prev[selectedConversationId] || [];
+          if (previous.length === latestMessages.length) {
+            const prevLast = previous[previous.length - 1]?.id;
+            const nextLast = latestMessages[latestMessages.length - 1]?.id;
+            if (prevLast === nextLast) return prev;
+          }
+
+          return {
+            ...prev,
+            [selectedConversationId]: latestMessages
+          };
+        });
+
+        const last = latestMessages[latestMessages.length - 1];
+        if (last?.text) {
+          setPreviewByConversation((prev) => ({
+            ...prev,
+            [selectedConversationId]: last.text
+          }));
+
+          setConversations((prev) =>
+            prev.map((conv) =>
+              conv.id === selectedConversationId
+                ? {
+                    ...conv,
+                    last_message_text: last.text,
+                    last_message_at: last.created_at || conv.last_message_at
+                  }
+                : conv
+            )
+          );
+        }
+      } catch {
+        // Silent in background polling
+      }
+    }, 4000);
+
+    return () => clearInterval(intervalId);
+  }, [selectedConversationId]);
+
+  // Handle message send - real API call
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draftMessage.trim() || !selectedConversationId) return;
+
+    const messageText = draftMessage.trim();
+    setSendingMessage(true);
+
+    try {
+      const response = await apiClient(`/business/conversations/${selectedConversationId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ text: messageText })
+      });
+
+      if (response && response.ok) {
+        // Add sent message to state
+        const sentMessage: Message = {
+          id: response.message.id,
+          text: response.message.message_text || response.message.body,
+          fromMe: true,
+          senderType: 'agent',
+          created_at: response.message.created_at
+        };
+
+        setMessagesByConversation((prev) => ({
+          ...prev,
+          [selectedConversationId]: [...(prev[selectedConversationId] || []), sentMessage]
+        }));
+
+        setConversations((prev) =>
+          prev.map((conv) =>
+            conv.id === selectedConversationId
+              ? {
+                  ...conv,
+                  status: 'active',
+                  last_message_text: sentMessage.text,
+                  last_message_at: sentMessage.created_at || conv.last_message_at
+                }
+              : conv
+          )
+        );
+
+        setPreviewByConversation((prev) => ({
+          ...prev,
+          [selectedConversationId]: sentMessage.text
+        }));
+
+        setDraftMessage('');
+      } else {
+        setError(`Error al enviar: ${response?.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('send message error:', err);
+      setError('Error al enviar el mensaje');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const selectedConversation = conversations.find((c) => c.id === selectedConversationId);
+  const selectedConversationFallbackLead = selectedConversation
+    ? leadLookupByPhone[toLeadPhoneKey(selectedConversation.user_phone)]
+    : null;
+  const selectedLeadId = selectedConversation?.lead_id || selectedConversationFallbackLead?.id || null;
+  const selectedLeadStatus =
+    selectedConversation?.lead_status
+    || selectedConversationFallbackLead?.status
+    || null;
+  const selectedMessages = selectedConversationId ? messagesByConversation[selectedConversationId] || [] : [];
+
+  const handleLeadStatusChange = async (nextStatus: LeadStatus) => {
+    if (!selectedConversationId || !selectedLeadId) return;
+
+    const previousStatus = selectedLeadStatus || null;
+
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === selectedConversationId
+          ? {
+              ...conv,
+              lead_status: nextStatus
+            }
+          : conv
+      )
+    );
+
+    try {
+      const response = await apiClient(`/business/leads/${selectedLeadId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus })
+      });
+
+      if (!response || !response.ok || !response.lead) {
+        throw new Error('update_lead_status_failed');
+      }
+
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.id === selectedConversationId
+            ? {
+                ...conv,
+                lead_id: selectedLeadId,
+                lead_status: response.lead.status
+              }
+            : conv
+        )
+      );
+
+      setLeadLookupByPhone((prev) => {
+        const phoneKey = selectedConversation ? toLeadPhoneKey(selectedConversation.user_phone) : '';
+        if (!phoneKey) return prev;
+        const current = prev[phoneKey] || { id: selectedLeadId };
+        return {
+          ...prev,
+          [phoneKey]: {
+            ...current,
+            id: selectedLeadId,
+            status: response.lead.status
+          }
+        };
+      });
+    } catch (err) {
+      console.error('update lead status error:', err);
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.id === selectedConversationId
+            ? {
+                ...conv,
+                lead_status: previousStatus
+              }
+            : conv
+        )
+      );
+      setError('No se pudo actualizar el estado del lead');
+    }
+  };
+
+  const handleConversationStatusChange = async (nextStatus: 'active' | 'closed') => {
+    if (!selectedConversationId) return;
+
+    try {
+      const response = await apiClient(`/business/conversations/${selectedConversationId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus })
+      });
+
+      if (!response || !response.ok) {
+        setError('No se pudo actualizar el estado de la conversación');
+        return;
+      }
+
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.id === selectedConversationId
+            ? {
+                ...conv,
+                status: response.conversation.status,
+                last_message_at: response.conversation.last_message_at || conv.last_message_at
+              }
+            : conv
+        )
+      );
+    } catch (err) {
+      console.error('update status error:', err);
+      setError('Error al actualizar estado');
+    }
+  };
+
+  if (authLoading) {
+    return <div className="p-6">Loading...</div>;
+  }
+
+  return (
+    <div className="flex h-[100dvh] gap-0">
+      {/* Left Column: Conversations List */}
+      <div className="w-1/3 border-r border-border bg-muted/30 flex flex-col">
+        {/* Header */}
+        <div className="border-b border-border bg-card p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xl font-semibold">Conversations</h2>
+            <Link
+              href="/"
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground hover:bg-muted"
+            >
+              Inicio
+            </Link>
+          </div>
+        </div>
+
+        {/* Error State */}
+        {error && (
+          <div className="p-4 text-sm text-destructive">{error}</div>
+        )}
+
+        {/* Loading State */}
+        {loadingConversations && (
+          <div className="p-4 text-sm text-muted-foreground">Cargando...</div>
+        )}
+
+        {/* Empty State */}
+        {!loadingConversations && conversations.length === 0 && (
+          <div className="flex items-center justify-center flex-1 text-sm text-muted-foreground">
+            No hay conversaciones aún
+          </div>
+        )}
+
+        {/* Conversations List */}
+        <div className="flex-1 overflow-y-auto">
+          {conversations.map((conv) => (
+            <button
+              key={conv.id}
+              onClick={() => handleSelectConversation(conv.id)}
+              className={`w-full border-b border-border/50 p-4 text-left transition-colors hover:bg-muted/50 ${
+                selectedConversationId === conv.id ? 'bg-background' : ''
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-foreground">{conv.lead_name || conv.user_phone}</p>
+                  {conv.lead_name && (
+                    <p className="truncate text-xs text-muted-foreground">{conv.user_phone}</p>
+                  )}
+                  <p className="truncate text-sm text-muted-foreground">
+                    {messagesByConversation[conv.id]?.[messagesByConversation[conv.id].length - 1]?.text
+                      || previewByConversation[conv.id]
+                      || conv.last_message_text
+                      || 'Sin mensajes'}
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground whitespace-nowrap">
+                  {formatTime(conv.last_message_at)}
+                </p>
+              </div>
+              <div className="mt-2">
+                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(conv.status)}`}>
+                  {getStatusLabel(conv.status)}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Right Column: Chat */}
+      <div className="flex-1 flex flex-col bg-background">
+        {/* No Selection State */}
+        {!selectedConversationId ? (
+          <div className="flex items-center justify-center h-full text-muted-foreground">
+            Selecciona una conversación
+          </div>
+        ) : (
+          <>
+            {/* Chat Header (Sticky) */}
+            <div className="sticky top-0 border-b border-border bg-card p-4 z-10">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold">{selectedConversation?.lead_name || selectedConversation?.user_phone}</h3>
+                  {selectedConversation?.lead_name && (
+                    <p className="text-xs text-muted-foreground">{selectedConversation?.user_phone}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(selectedConversation?.status || 'bot')}`}>
+                    {getStatusLabel((selectedConversation?.status || 'bot') as Conversation['status'])}
+                  </span>
+                  <select
+                    value={selectedConversation?.status || 'bot'}
+                    onChange={(e) => {
+                      const status = e.target.value as 'bot' | 'active' | 'closed';
+                      if (status === 'bot') return;
+                      handleConversationStatusChange(status);
+                    }}
+                    className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                  >
+                    <option value="bot" disabled>Bot (automatico)</option>
+                    <option value="active">Activo</option>
+                    <option value="closed">Cerrado</option>
+                  </select>
+                  {selectedLeadId ? (
+                    <select
+                      value={selectedLeadStatus || 'NEW'}
+                      onChange={(e) => handleLeadStatusChange(e.target.value as LeadStatus)}
+                      className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                    >
+                      {LEAD_STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>
+                          Lead: {status}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="rounded-md border border-dashed border-input px-2 py-1 text-xs text-muted-foreground">
+                      Sin lead
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {loadingMessages ? (
+                <div className="text-sm text-muted-foreground">Cargando mensajes...</div>
+              ) : selectedMessages.length === 0 ? (
+                <div className="text-sm text-muted-foreground">Sin mensajes</div>
+              ) : (
+                selectedMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.fromMe ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-xs rounded-lg px-3 py-2 text-sm ${
+                        msg.senderType === 'customer'
+                          ? 'bg-muted text-foreground border border-border/50'
+                          : msg.senderType === 'bot'
+                            ? 'bg-blue-600 text-white'
+                            : msg.senderType === 'agent'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-zinc-600 text-white'
+                      }`}
+                    >
+                      <p className="mb-1 text-[10px] uppercase opacity-80 tracking-wide">
+                        {msg.senderType === 'customer'
+                          ? 'Cliente'
+                          : msg.senderType === 'bot'
+                            ? 'Bot'
+                            : msg.senderType === 'agent'
+                              ? 'Agente'
+                              : 'Desconocido'}
+                      </p>
+                      {msg.text}
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input Area (Fixed) */}
+            <form
+              onSubmit={handleSendMessage}
+              className="border-t border-border bg-card p-4"
+            >
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={draftMessage}
+                  onChange={(e) => setDraftMessage(e.target.value)}
+                  placeholder="Escribe un mensaje..."
+                  disabled={sendingMessage}
+                  className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={!draftMessage.trim() || sendingMessage}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sendingMessage ? 'Enviando...' : 'Enviar'}
+                </button>
+              </div>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
