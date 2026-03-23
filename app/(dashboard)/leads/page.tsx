@@ -18,6 +18,27 @@ interface Lead {
 
 const STATUS_OPTIONS: LeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED', 'CLOSED'];
 
+const STATUS_TITLES: Record<LeadStatus, string> = {
+  NEW: 'Nuevos',
+  CONTACTED: 'Contactados',
+  QUALIFIED: 'Calificados',
+  CLOSED: 'Cerrados'
+};
+
+function getStatusClasses(status: LeadStatus): string {
+  if (status === 'NEW') return 'bg-sky-100 text-sky-700 border-sky-200';
+  if (status === 'CONTACTED') return 'bg-amber-100 text-amber-700 border-amber-200';
+  if (status === 'QUALIFIED') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+  return 'bg-zinc-100 text-zinc-700 border-zinc-200';
+}
+
+function getNextLeadAction(status: LeadStatus): { label: string; next: LeadStatus } {
+  if (status === 'NEW') return { label: 'Marcar Contactado', next: 'CONTACTED' };
+  if (status === 'CONTACTED') return { label: 'Calificar', next: 'QUALIFIED' };
+  if (status === 'QUALIFIED') return { label: 'Cerrar', next: 'CLOSED' };
+  return { label: 'Reabrir', next: 'CONTACTED' };
+}
+
 function formatDate(dateString?: string): string {
   if (!dateString) return '-';
   const date = new Date(dateString);
@@ -35,8 +56,12 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [highlightedLeadId, setHighlightedLeadId] = useState<string | null>(null);
   const [savingByLead, setSavingByLead] = useState<Record<string, boolean>>({});
   const [nameDraftByLead, setNameDraftByLead] = useState<Record<string, string>>({});
+  const [onlyPending, setOnlyPending] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const leadsById = useMemo(() => {
     const map: Record<string, Lead> = {};
@@ -77,7 +102,8 @@ export default function LeadsPage() {
   const patchLead = async (
     leadId: string,
     payload: Partial<Pick<Lead, 'name' | 'status'>>,
-    previousLead: Lead
+    previousLead: Lead,
+    successMessage?: string
   ) => {
     setSavingByLead((prev) => ({ ...prev, [leadId]: true }));
 
@@ -99,6 +125,13 @@ export default function LeadsPage() {
         [leadId]: response.lead.name || ''
       }));
       setError(null);
+      if (successMessage) {
+        setToastMessage(successMessage);
+        setHighlightedLeadId(leadId);
+        setTimeout(() => setToastMessage(null), 1800);
+        setTimeout(() => setHighlightedLeadId((prev) => (prev === leadId ? null : prev)), 1600);
+      }
+      return response.lead as Lead;
     } catch (err) {
       // Rollback optimistic update on failure.
       setLeads((prev) =>
@@ -110,12 +143,13 @@ export default function LeadsPage() {
       }));
       console.error('patch lead error:', err);
       setError('No se pudo guardar el lead. Revirtiendo cambios.');
+      return null;
     } finally {
       setSavingByLead((prev) => ({ ...prev, [leadId]: false }));
     }
   };
 
-  const handleNameSave = (leadId: string) => {
+  const handleNameSave = async (leadId: string) => {
     const currentLead = leadsById[leadId];
     if (!currentLead) return;
 
@@ -123,7 +157,12 @@ export default function LeadsPage() {
     const currentName = currentLead.name ?? '';
     if (draftName === currentName) return;
 
-    patchLead(leadId, { name: draftName === '' ? null : draftName }, currentLead);
+    await patchLead(
+      leadId,
+      { name: draftName === '' ? null : draftName },
+      currentLead,
+      'Nombre actualizado'
+    );
   };
 
   const handleStatusChange = (leadId: string, nextStatus: LeadStatus) => {
@@ -134,8 +173,44 @@ export default function LeadsPage() {
 
     const optimisticLead: Lead = { ...currentLead, status: nextStatus };
     setLeads((prev) => prev.map((lead) => (lead.id === leadId ? optimisticLead : lead)));
-    patchLead(leadId, { status: nextStatus }, currentLead);
+    patchLead(leadId, { status: nextStatus }, currentLead, `Lead movido a ${nextStatus}`);
   };
+
+  const filteredLeads = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+
+    return leads.filter((lead) => {
+      if (onlyPending && lead.status === 'CLOSED') return false;
+
+      if (!term) return true;
+
+      const haystack = `${lead.name || ''} ${lead.phone}`.toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [leads, onlyPending, searchQuery]);
+
+  const groupedLeads = useMemo(() => {
+    const grouped: Record<LeadStatus, Lead[]> = {
+      NEW: [],
+      CONTACTED: [],
+      QUALIFIED: [],
+      CLOSED: []
+    };
+
+    for (const lead of filteredLeads) {
+      grouped[lead.status].push(lead);
+    }
+
+    for (const status of STATUS_OPTIONS) {
+      grouped[status].sort((a, b) => {
+        const aTs = new Date(a.last_interaction_at || a.updated_at || a.created_at).getTime();
+        const bTs = new Date(b.last_interaction_at || b.updated_at || b.created_at).getTime();
+        return aTs - bTs;
+      });
+    }
+
+    return grouped;
+  }, [filteredLeads]);
 
   if (loading) {
     return <div className="p-6">Cargando leads...</div>;
@@ -156,80 +231,117 @@ export default function LeadsPage() {
         <p className="text-sm text-muted-foreground">Prospectos por negocio conectados a conversaciones.</p>
       </header>
 
-      {error && <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+      <div className="mb-4 flex flex-col gap-2 rounded-lg border bg-card p-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-2">
+          <input
+            id="pending-only"
+            type="checkbox"
+            checked={onlyPending}
+            onChange={(e) => setOnlyPending(e.target.checked)}
+            className="h-4 w-4"
+          />
+          <label htmlFor="pending-only" className="text-sm text-foreground">Solo pendientes</label>
+        </div>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Buscar por nombre o telefono"
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm md:max-w-xs"
+        />
+      </div>
 
-      {leads.length === 0 ? (
+      {error && <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+      {toastMessage && (
+        <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+          {toastMessage}
+        </div>
+      )}
+
+      {filteredLeads.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
           No hay leads todavía.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full min-w-[760px] table-fixed text-sm">
-            <thead className="bg-muted/40 text-left">
-              <tr>
-                <th className="w-[24%] px-3 py-2 font-medium">Lead</th>
-                <th className="w-[28%] px-3 py-2 font-medium">Nombre</th>
-                <th className="w-[16%] px-3 py-2 font-medium">Estado</th>
-                <th className="w-[16%] px-3 py-2 font-medium">Ultima interaccion</th>
-                <th className="w-[16%] px-3 py-2 font-medium">Actualizado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leads.map((lead) => (
-                <tr key={lead.id} className="border-t">
-                  <td className="px-3 py-2">
-                    <div className="truncate font-medium">{lead.name || lead.phone}</div>
-                    <div className="truncate text-xs text-muted-foreground">{lead.phone}</div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={nameDraftByLead[lead.id] ?? ''}
-                        onChange={(e) => {
-                          const nextValue = e.target.value;
-                          setNameDraftByLead((prev) => ({ ...prev, [lead.id]: nextValue }));
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleNameSave(lead.id);
-                          }
-                        }}
-                        className="w-full rounded-md border border-input bg-background px-2 py-1"
-                        placeholder="Nombre del lead"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleNameSave(lead.id)}
-                        disabled={savingByLead[lead.id] || (nameDraftByLead[lead.id] ?? '') === (lead.name ?? '')}
-                        className="rounded-md border border-input bg-muted px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+        <div className="space-y-4">
+          {STATUS_OPTIONS.map((status) => (
+            <section key={status} className="rounded-lg border bg-card">
+              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
+                <h2 className="font-medium">{STATUS_TITLES[status]}</h2>
+                <span className="rounded-full border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground">
+                  {groupedLeads[status].length}
+                </span>
+              </div>
+
+              <div className="p-3 space-y-2">
+                {groupedLeads[status].length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Sin leads en esta seccion.</p>
+                ) : (
+                  groupedLeads[status].map((lead) => {
+                    const nextAction = getNextLeadAction(lead.status);
+
+                    return (
+                      <article
+                        key={lead.id}
+                        className={`rounded-md border p-3 ${highlightedLeadId === lead.id ? 'bg-amber-50 border-amber-200' : 'bg-background'}`}
                       >
-                        Guardar
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <select
-                      value={lead.status}
-                      onChange={(e) => handleStatusChange(lead.id, e.target.value as LeadStatus)}
-                      className="rounded-md border border-input bg-background px-2 py-1"
-                    >
-                      {STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="truncate px-3 py-2">{formatDate(lead.last_interaction_at)}</td>
-                  <td className="px-3 py-2">
-                    <span className="truncate">{savingByLead[lead.id] ? 'Guardando...' : formatDate(lead.updated_at)}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-foreground">{lead.name || lead.phone}</p>
+                            <p className="truncate text-xs text-muted-foreground">{lead.phone}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Ultima interaccion: {formatDate(lead.last_interaction_at)}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(lead.status)}`}>
+                              {lead.status}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleStatusChange(lead.id, nextAction.next)}
+                              disabled={savingByLead[lead.id]}
+                              className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/85 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {savingByLead[lead.id] ? 'Guardando...' : nextAction.label}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={nameDraftByLead[lead.id] ?? ''}
+                            onChange={(e) => {
+                              const nextValue = e.target.value;
+                              setNameDraftByLead((prev) => ({ ...prev, [lead.id]: nextValue }));
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                void handleNameSave(lead.id);
+                              }
+                            }}
+                            className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+                            placeholder="Nombre del lead"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void handleNameSave(lead.id)}
+                            disabled={savingByLead[lead.id] || (nameDraftByLead[lead.id] ?? '') === (lead.name ?? '')}
+                            className="rounded-md border border-input bg-muted px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Guardar
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+          ))}
         </div>
       )}
     </main>

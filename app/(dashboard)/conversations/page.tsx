@@ -37,7 +37,26 @@ interface LeadLookupItem {
   status?: LeadStatus | null;
 }
 
-const LEAD_STATUS_OPTIONS: LeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED', 'CLOSED'];
+function getLeadStatusClasses(status: LeadStatus | null): string {
+  if (status === 'NEW') return 'bg-sky-100 text-sky-700 border-sky-200';
+  if (status === 'CONTACTED') return 'bg-amber-100 text-amber-700 border-amber-200';
+  if (status === 'QUALIFIED') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+  if (status === 'CLOSED') return 'bg-zinc-100 text-zinc-700 border-zinc-200';
+  return 'bg-muted text-muted-foreground border-border';
+}
+
+function getLeadStatusLabel(status: LeadStatus | null): string {
+  if (!status) return 'Sin estado';
+  return status;
+}
+
+function getNextLeadAction(status: LeadStatus | null): { label: string; next: LeadStatus } | null {
+  if (status === 'NEW') return { label: 'Marcar Contactado', next: 'CONTACTED' };
+  if (status === 'CONTACTED') return { label: 'Calificar Lead', next: 'QUALIFIED' };
+  if (status === 'QUALIFIED') return { label: 'Cerrar Lead', next: 'CLOSED' };
+  if (status === 'CLOSED') return { label: 'Reabrir Lead', next: 'CONTACTED' };
+  return { label: 'Marcar Contactado', next: 'CONTACTED' };
+}
 
 // Simple time formatter (HH:MM)
 const formatTime = (dateString: string): string => {
@@ -133,6 +152,9 @@ export default function ConversationsPage() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [leadLookupByPhone, setLeadLookupByPhone] = useState<Record<string, LeadLookupItem>>({});
+  const [savingLeadStatus, setSavingLeadStatus] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [highlightedConversationId, setHighlightedConversationId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const getConversationById = (conversationId: string) =>
@@ -422,6 +444,8 @@ export default function ConversationsPage() {
     if (!selectedConversationId || !selectedLeadId) return;
 
     const previousStatus = selectedLeadStatus || null;
+    setSavingLeadStatus(true);
+    setError(null);
 
     setConversations((prev) =>
       prev.map((conv) =>
@@ -469,6 +493,11 @@ export default function ConversationsPage() {
           }
         };
       });
+
+      setHighlightedConversationId(selectedConversationId);
+      setToastMessage(`Lead actualizado a ${response.lead.status}`);
+      setTimeout(() => setHighlightedConversationId((prev) => (prev === selectedConversationId ? null : prev)), 1600);
+      setTimeout(() => setToastMessage(null), 1800);
     } catch (err) {
       console.error('update lead status error:', err);
       setConversations((prev) =>
@@ -482,7 +511,15 @@ export default function ConversationsPage() {
         )
       );
       setError('No se pudo actualizar el estado del lead');
+    } finally {
+      setSavingLeadStatus(false);
     }
+  };
+
+  const handleAdvanceLeadStatus = async () => {
+    const nextAction = getNextLeadAction(selectedLeadStatus);
+    if (!nextAction) return;
+    await handleLeadStatusChange(nextAction.next);
   };
 
   const handleConversationStatusChange = async (nextStatus: 'active' | 'closed') => {
@@ -562,6 +599,8 @@ export default function ConversationsPage() {
               onClick={() => handleSelectConversation(conv.id)}
               className={`w-full border-b border-border/50 p-4 text-left transition-colors hover:bg-muted/50 ${
                 selectedConversationId === conv.id ? 'bg-background' : ''
+              } ${
+                highlightedConversationId === conv.id ? 'bg-amber-50' : ''
               }`}
             >
               <div className="flex items-start justify-between gap-2">
@@ -627,17 +666,19 @@ export default function ConversationsPage() {
                     <option value="closed">Cerrado</option>
                   </select>
                   {selectedLeadId ? (
-                    <select
-                      value={selectedLeadStatus || 'NEW'}
-                      onChange={(e) => handleLeadStatusChange(e.target.value as LeadStatus)}
-                      className="rounded-md border border-input bg-background px-2 py-1 text-xs"
-                    >
-                      {LEAD_STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>
-                          Lead: {status}
-                        </option>
-                      ))}
-                    </select>
+                    <>
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getLeadStatusClasses(selectedLeadStatus)}`}>
+                        Lead: {getLeadStatusLabel(selectedLeadStatus)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAdvanceLeadStatus}
+                        disabled={savingLeadStatus}
+                        className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/85 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {savingLeadStatus ? 'Guardando...' : getNextLeadAction(selectedLeadStatus)?.label}
+                      </button>
+                    </>
                   ) : (
                     <span className="rounded-md border border-dashed border-input px-2 py-1 text-xs text-muted-foreground">
                       Sin lead
@@ -646,6 +687,12 @@ export default function ConversationsPage() {
                 </div>
               </div>
             </div>
+
+            {toastMessage && (
+              <div className="fixed right-4 top-4 z-50 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 shadow-sm">
+                {toastMessage}
+              </div>
+            )}
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
