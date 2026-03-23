@@ -1,321 +1,27 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { apiClient } from '@/lib/api/apiClient';
-
-type LeadStatus = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'CLOSED';
-
-interface Lead {
-  id: string;
-  phone: string;
-  name: string | null;
-  status: LeadStatus;
-  created_at: string;
-  updated_at: string;
-  last_interaction_at: string;
-}
-
-interface ConversationSummary {
-  id: string;
-  lead_id?: string | null;
-  status?: 'bot' | 'active' | 'closed';
-  last_message_sender_type?: 'customer' | 'bot' | 'agent' | 'unknown' | null;
-  last_message_status?: string | null;
-  last_message_direction?: string;
-  last_message_at?: string;
-}
-
-type LastMessageActor = 'customer' | 'bot' | 'agent' | 'unknown';
-type AttentionLevel = 'customer' | 'bot' | null;
-
-const STATUS_OPTIONS: LeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED', 'CLOSED'];
-
-const STATUS_TITLES: Record<LeadStatus, string> = {
-  NEW: 'Nuevos',
-  CONTACTED: 'Contactados',
-  QUALIFIED: 'Calificados',
-  CLOSED: 'Cerrados'
-};
-
-function getStatusClasses(status: LeadStatus): string {
-  if (status === 'NEW') return 'bg-sky-100 text-sky-700 border-sky-200';
-  if (status === 'CONTACTED') return 'bg-amber-100 text-amber-700 border-amber-200';
-  if (status === 'QUALIFIED') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-  return 'bg-zinc-100 text-zinc-700 border-zinc-200';
-}
-
-function getNextLeadAction(status: LeadStatus): { label: string; next: LeadStatus } {
-  if (status === 'NEW') return { label: 'Marcar Contactado', next: 'CONTACTED' };
-  if (status === 'CONTACTED') return { label: 'Calificar', next: 'QUALIFIED' };
-  if (status === 'QUALIFIED') return { label: 'Cerrar', next: 'CLOSED' };
-  return { label: 'Reabrir', next: 'CONTACTED' };
-}
-
-function classifyLastMessageActor(params: {
-  senderType?: string | null;
-  status?: string | null;
-  direction?: string | null;
-  conversationStatus?: ConversationSummary['status'] | null;
-}): LastMessageActor {
-  const senderType = String(params.senderType || '').toLowerCase();
-  if (senderType === 'customer' || senderType === 'bot' || senderType === 'agent') {
-    return senderType;
-  }
-
-  const status = String(params.status || '').toLowerCase();
-  if (status.startsWith('agent_')) return 'agent';
-
-  const direction = String(params.direction || '').toLowerCase();
-  if (direction === 'inbound' || direction === 'incoming') return 'customer';
-  if (direction === 'outgoing') return 'agent';
-  if (direction === 'outbound' && params.conversationStatus === 'bot') return 'bot';
-
-  return 'unknown';
-}
-
-function getAttentionLevelFromLastMessage(params: {
-  senderType?: string | null;
-  status?: string | null;
-  direction?: string | null;
-  conversationStatus?: ConversationSummary['status'] | null;
-}): AttentionLevel {
-  const actor = classifyLastMessageActor(params);
-  if (actor === 'customer') return 'customer';
-  if (actor === 'bot') return 'bot';
-  return null;
-}
-
-function toTimestamp(value?: string | null): number {
-  if (!value) return 0;
-  const ts = new Date(value).getTime();
-  return Number.isNaN(ts) ? 0 : ts;
-}
-
-function formatDate(dateString?: string): string {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString('es-ES', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
+import { LeadList } from '@/components/leads/LeadList';
+import { useLeads } from '@/hooks';
+import type { LeadStatus } from '@/lib/utils/leads';
 
 export default function LeadsPage() {
-  const hasLoadedRef = useRef(false);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [highlightedLeadId, setHighlightedLeadId] = useState<string | null>(null);
-  const [savingByLead, setSavingByLead] = useState<Record<string, boolean>>({});
-  const [nameDraftByLead, setNameDraftByLead] = useState<Record<string, string>>({});
-  const [onlyPending, setOnlyPending] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [attentionByLeadId, setAttentionByLeadId] = useState<Record<string, AttentionLevel>>({});
-
-  const leadsById = useMemo(() => {
-    const map: Record<string, Lead> = {};
-    for (const lead of leads) map[lead.id] = lead;
-    return map;
-  }, [leads]);
-
-  const fetchLeads = async () => {
-    const isInitialLoad = !hasLoadedRef.current;
-    try {
-      if (isInitialLoad) {
-        setLoading(true);
-      }
-      setError(null);
-      const [leadsResponse, conversationsResponse] = await Promise.all([
-        apiClient('/business/leads'),
-        apiClient('/business/conversations')
-      ]);
-
-      if (!leadsResponse || !leadsResponse.ok) {
-        setError('No se pudieron cargar los leads');
-        return;
-      }
-
-      const nextLeads: Lead[] = leadsResponse.leads || [];
-      setLeads(nextLeads);
-
-      if (isInitialLoad) {
-        const nextDrafts: Record<string, string> = {};
-        for (const lead of nextLeads) {
-          nextDrafts[lead.id] = lead.name || '';
-        }
-        setNameDraftByLead(nextDrafts);
-      }
-
-      const rawConversations: ConversationSummary[] =
-        conversationsResponse && conversationsResponse.ok
-          ? (conversationsResponse.conversations || [])
-          : [];
-
-      const latestByLeadId: Record<string, ConversationSummary> = {};
-      for (const conv of rawConversations) {
-        if (!conv.lead_id) continue;
-        const existing = latestByLeadId[conv.lead_id];
-        if (!existing || toTimestamp(conv.last_message_at) > toTimestamp(existing.last_message_at)) {
-          latestByLeadId[conv.lead_id] = conv;
-        }
-      }
-
-      const nextAttentionByLeadId: Record<string, AttentionLevel> = {};
-      for (const leadId of Object.keys(latestByLeadId)) {
-        const latest = latestByLeadId[leadId];
-        nextAttentionByLeadId[leadId] = getAttentionLevelFromLastMessage({
-          senderType: latest.last_message_sender_type,
-          status: latest.last_message_status,
-          direction: latest.last_message_direction,
-          conversationStatus: latest.status
-        });
-      }
-      setAttentionByLeadId(nextAttentionByLeadId);
-    } catch (err) {
-      console.error('fetch leads error:', err);
-      setError('Error al cargar leads');
-    } finally {
-      if (isInitialLoad) {
-        setLoading(false);
-        hasLoadedRef.current = true;
-      }
-    }
-  };
-
-  useEffect(() => {
-    fetchLeads();
-
-    // Poll every 5 seconds to reduce noise while keeping timely updates
-    const intervalId = setInterval(() => {
-      fetchLeads();
-    }, 5000);
-
-    return () => clearInterval(intervalId);
-  }, []);
-
-  const patchLead = async (
-    leadId: string,
-    payload: Partial<Pick<Lead, 'name' | 'status'>>,
-    previousLead: Lead,
-    successMessage?: string
-  ) => {
-    setSavingByLead((prev) => ({ ...prev, [leadId]: true }));
-
-    try {
-      const response = await apiClient(`/business/leads/${leadId}`, {
-        method: 'PATCH',
-        body: JSON.stringify(payload)
-      });
-
-      if (!response || !response.ok || !response.lead) {
-        throw new Error('patch_failed');
-      }
-
-      setLeads((prev) =>
-        prev.map((lead) => (lead.id === leadId ? response.lead : lead))
-      );
-      setNameDraftByLead((prev) => ({
-        ...prev,
-        [leadId]: response.lead.name || ''
-      }));
-      setError(null);
-      if (successMessage) {
-        setToastMessage(successMessage);
-        setHighlightedLeadId(leadId);
-        setTimeout(() => setToastMessage(null), 1800);
-        setTimeout(() => setHighlightedLeadId((prev) => (prev === leadId ? null : prev)), 1600);
-      }
-      return response.lead as Lead;
-    } catch (err) {
-      // Rollback optimistic update on failure.
-      setLeads((prev) =>
-        prev.map((lead) => (lead.id === leadId ? previousLead : lead))
-      );
-      setNameDraftByLead((prev) => ({
-        ...prev,
-        [leadId]: previousLead.name || ''
-      }));
-      console.error('patch lead error:', err);
-      setError('No se pudo guardar el lead. Revirtiendo cambios.');
-      return null;
-    } finally {
-      setSavingByLead((prev) => ({ ...prev, [leadId]: false }));
-    }
-  };
-
-  const handleNameSave = async (leadId: string) => {
-    const currentLead = leadsById[leadId];
-    if (!currentLead) return;
-
-    const draftName = nameDraftByLead[leadId] ?? '';
-    const currentName = currentLead.name ?? '';
-    if (draftName === currentName) return;
-
-    await patchLead(
-      leadId,
-      { name: draftName === '' ? null : draftName },
-      currentLead,
-      'Nombre actualizado'
-    );
-  };
-
-  const handleStatusChange = (leadId: string, nextStatus: LeadStatus) => {
-    const currentLead = leadsById[leadId];
-    if (!currentLead) return;
-
-    if (currentLead.status === nextStatus) return;
-
-    const optimisticLead: Lead = { ...currentLead, status: nextStatus };
-    setLeads((prev) => prev.map((lead) => (lead.id === leadId ? optimisticLead : lead)));
-    patchLead(leadId, { status: nextStatus }, currentLead, `Lead movido a ${nextStatus}`);
-  };
-
-  const filteredLeads = useMemo(() => {
-    const term = searchQuery.trim().toLowerCase();
-
-    return leads.filter((lead) => {
-      if (onlyPending && lead.status === 'CLOSED') return false;
-
-      if (!term) return true;
-
-      const haystack = `${lead.name || ''} ${lead.phone}`.toLowerCase();
-      return haystack.includes(term);
-    });
-  }, [leads, onlyPending, searchQuery]);
-
-  const groupedLeads = useMemo(() => {
-    const grouped: Record<LeadStatus, Lead[]> = {
-      NEW: [],
-      CONTACTED: [],
-      QUALIFIED: [],
-      CLOSED: []
-    };
-
-    for (const lead of filteredLeads) {
-      grouped[lead.status].push(lead);
-    }
-
-    for (const status of STATUS_OPTIONS) {
-      grouped[status].sort((a, b) => {
-        const aAttention = attentionByLeadId[a.id] ? 1 : 0;
-        const bAttention = attentionByLeadId[b.id] ? 1 : 0;
-        if (aAttention !== bAttention) return bAttention - aAttention;
-
-        const aTs = toTimestamp(a.last_interaction_at || a.updated_at || a.created_at);
-        const bTs = toTimestamp(b.last_interaction_at || b.updated_at || b.created_at);
-        if (aTs !== bTs) return bTs - aTs;
-        return a.id.localeCompare(b.id);
-      });
-    }
-
-    return grouped;
-  }, [attentionByLeadId, filteredLeads]);
+  const {
+    loading,
+    error,
+    toastMessage,
+    onlyPending,
+    selectedCategory,
+    searchQuery,
+    hasAnyLeads,
+    sections,
+    setOnlyPending,
+    setSelectedCategory,
+    setSearchQuery,
+    setLeadNameDraft,
+    saveLeadName,
+    advanceLeadStatus
+  } = useLeads();
 
   if (loading) {
     return <div className="p-6">Cargando leads...</div>;
@@ -347,13 +53,26 @@ export default function LeadsPage() {
           />
           <label htmlFor="pending-only" className="text-sm text-foreground">Solo pendientes</label>
         </div>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Buscar por nombre o telefono"
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm md:max-w-xs"
-        />
+        <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value as 'ALL' | LeadStatus)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm md:w-44"
+          >
+            <option value="ALL">Todas las categorias</option>
+            <option value="NEW">Nuevos</option>
+            <option value="CONTACTED">Contactados</option>
+            <option value="QUALIFIED">Calificados</option>
+            {!onlyPending && <option value="CLOSED">Cerrados</option>}
+          </select>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar por nombre o telefono"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm md:max-w-xs"
+          />
+        </div>
       </div>
 
       {error && <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
@@ -363,105 +82,14 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {filteredLeads.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-          No hay leads todavía.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {STATUS_OPTIONS.map((status) => (
-            <section key={status} className="rounded-lg border bg-card">
-              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
-                <h2 className="font-medium">{STATUS_TITLES[status]}</h2>
-                <span className="rounded-full border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground">
-                  {groupedLeads[status].length}
-                </span>
-              </div>
-
-              <div className="p-3 space-y-2">
-                {groupedLeads[status].length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Sin leads en esta seccion.</p>
-                ) : (
-                  groupedLeads[status].map((lead) => {
-                    const nextAction = getNextLeadAction(lead.status);
-                    const attentionLevel = attentionByLeadId[lead.id];
-
-                    return (
-                      <article
-                        key={lead.id}
-                        className={`rounded-md border p-3 ${highlightedLeadId === lead.id ? 'bg-amber-50 border-amber-200' : 'bg-background'}`}
-                      >
-                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                          <div className="min-w-0">
-                            <p className="truncate font-medium text-foreground">{lead.name || lead.phone}</p>
-                            <p className="truncate text-xs text-muted-foreground">{lead.phone}</p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              Ultima interaccion: {formatDate(lead.last_interaction_at)}
-                            </p>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getStatusClasses(lead.status)}`}>
-                              {lead.status}
-                            </span>
-                            {attentionLevel === 'customer' && (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                                Cliente espera
-                              </span>
-                            )}
-                            {attentionLevel === 'bot' && (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                Falta agente
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleStatusChange(lead.id, nextAction.next)}
-                              disabled={savingByLead[lead.id]}
-                              className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/85 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {savingByLead[lead.id] ? 'Guardando...' : nextAction.label}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={nameDraftByLead[lead.id] ?? ''}
-                            onChange={(e) => {
-                              const nextValue = e.target.value;
-                              setNameDraftByLead((prev) => ({ ...prev, [lead.id]: nextValue }));
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                void handleNameSave(lead.id);
-                              }
-                            }}
-                            className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
-                            placeholder="Nombre del lead"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => void handleNameSave(lead.id)}
-                            disabled={savingByLead[lead.id] || (nameDraftByLead[lead.id] ?? '') === (lead.name ?? '')}
-                            className="rounded-md border border-input bg-muted px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Guardar
-                          </button>
-                        </div>
-                      </article>
-                    );
-                  })
-                )}
-              </div>
-            </section>
-          ))}
-        </div>
-      )}
+      <LeadList
+        sections={sections}
+        hasAnyLeads={hasAnyLeads}
+        emptyStateMessage="No hay leads todavía."
+        onAdvanceStatus={advanceLeadStatus}
+        onNameChange={setLeadNameDraft}
+        onSaveName={saveLeadName}
+      />
     </main>
   );
 }
