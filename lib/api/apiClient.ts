@@ -1,4 +1,17 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
+const COMPILED_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
+
+function resolveApiUrl() {
+  // Prevent stale local builds from pointing API to frontend port 3001.
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname
+    const isLocalHost = host === "localhost" || host === "127.0.0.1"
+    if (isLocalHost && COMPILED_API_URL === "http://localhost:3001") {
+      return "http://localhost:3000"
+    }
+  }
+
+  return COMPILED_API_URL
+}
 
 export async function apiClient(
   endpoint: string,
@@ -9,7 +22,8 @@ export async function apiClient(
       ? localStorage.getItem("token")
       : null
 
-  const url = `${API_URL}${endpoint}`
+  const apiUrl = resolveApiUrl()
+  const url = `${apiUrl}${endpoint}`
   console.log("API Request:", { url, method: options.method })
 
   const res = await fetch(url, {
@@ -21,7 +35,9 @@ export async function apiClient(
     },
   })
 
-  if (res.status === 401) {
+  const isAuthEndpoint = endpoint.startsWith("/auth/login") || endpoint.startsWith("/auth/register")
+
+  if (res.status === 401 && !isAuthEndpoint) {
     if (typeof window !== "undefined") {
       localStorage.removeItem("token")
       window.location.href = "/login"
@@ -29,10 +45,25 @@ export async function apiClient(
     return
   }
 
-  const data = await res.json()
+  const contentType = res.headers.get("content-type") || ""
+  const isJson = contentType.includes("application/json")
+  const data = isJson ? await res.json() : null
+  const text = isJson ? "" : await res.text()
 
   if (!res.ok) {
-    throw new Error(data.message || "Error en la petición")
+    if (data && typeof data === "object") {
+      const apiError = data as { message?: string; error?: string }
+      if (apiError.message) throw new Error(apiError.message)
+      if (apiError.error) throw new Error(apiError.error)
+    }
+
+    if (!isJson) {
+      throw new Error(
+        `La API devolvió HTML/no-JSON en ${url}. Revisa NEXT_PUBLIC_API_URL y puertos.`
+      )
+    }
+
+    throw new Error("Error en la petición")
   }
 
   return data
