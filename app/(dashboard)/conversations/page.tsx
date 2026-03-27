@@ -20,13 +20,34 @@ export default function ConversationsPage() {
     conversationListItems,
     selectedHeaderData,
     selectConversation,
+    clearSelectedConversation,
     sendMessage,
     updateConversationStatus,
     advanceLeadStatus
   } = useConversations({ authLoading });
 
   const [draftMessage, setDraftMessage] = useState('');
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isMobileViewingChat, setIsMobileViewingChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const media = window.matchMedia('(max-width: 767px)');
+    const updateViewport = () => setIsMobileViewport(media.matches);
+
+    updateViewport();
+    media.addEventListener('change', updateViewport);
+
+    return () => media.removeEventListener('change', updateViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport) {
+      setIsMobileViewingChat(false);
+    }
+  }, [isMobileViewport]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -40,13 +61,31 @@ export default function ConversationsPage() {
     if (wasSent) setDraftMessage('');
   };
 
+  const handleSelectConversation = async (conversationId: string) => {
+    await selectConversation(conversationId);
+    if (isMobileViewport) {
+      setIsMobileViewingChat(true);
+    }
+  };
+
+  const handleBackToConversations = () => {
+    setIsMobileViewingChat(false);
+    setDraftMessage('');
+    clearSelectedConversation();
+  };
+
   if (authLoading) {
     return <div className="p-6">Loading...</div>;
   }
 
+  const showListPane = !isMobileViewport || !isMobileViewingChat;
+  const showChatPane = !isMobileViewport || isMobileViewingChat;
+
   return (
-    <div className="flex h-[100dvh] gap-0">
-      <div className="w-1/3 border-r border-border bg-muted/30 flex flex-col">
+    <div className="flex h-[100dvh] gap-0 md:flex-row">
+      <div
+        className={`${showListPane ? 'flex' : 'hidden'} w-full flex-col border-r border-border bg-muted/30 md:flex md:w-1/3`}
+      >
         <div className="border-b border-border bg-card p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-xl font-semibold">Conversations</h2>
@@ -74,11 +113,11 @@ export default function ConversationsPage() {
           items={conversationListItems}
           emptyStateMessage="No hay conversaciones aún"
           showEmptyState={!loadingConversations}
-          onSelectConversation={selectConversation}
+          onSelectConversation={handleSelectConversation}
         />
       </div>
 
-      <div className="flex-1 flex flex-col bg-background">
+      <div className={`${showChatPane ? 'flex' : 'hidden'} flex-1 flex-col bg-background md:flex`}>
         {!selectedConversationId || !selectedHeaderData ? (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             Selecciona una conversación
@@ -100,6 +139,8 @@ export default function ConversationsPage() {
               leadActionLabel={selectedHeaderData.leadActionLabel}
               onLeadAction={advanceLeadStatus}
               leadActionDisabled={selectedHeaderData.leadActionDisabled}
+              mobileMode={isMobileViewport}
+              onBackToList={handleBackToConversations}
             />
 
             {toastMessage && (
@@ -149,7 +190,7 @@ export default function ConversationsPage() {
 
             <form
               onSubmit={handleSendMessage}
-              className="border-t border-border bg-card p-4"
+              className="sticky bottom-0 border-t border-border bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:static md:pb-4"
             >
               <div className="flex gap-2">
                 <input

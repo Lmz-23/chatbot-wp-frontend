@@ -82,6 +82,7 @@ const transformApiMessage = (apiMsg: any, conversationPhone?: string): Conversat
   };
 };
 
+// Owns message state, sending flow and polling for the currently selected conversation.
 export function useConversationMessages({
   selectedConversationId,
   conversationPhoneById,
@@ -93,6 +94,7 @@ export function useConversationMessages({
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
 
+  // Fetches and normalizes API messages into UI-ready records.
   const fetchMessages = async (conversationId: string) => {
     const response = await apiClient(`/business/conversations/${conversationId}/messages`);
     if (!response || !response.ok) return [] as ConversationMessage[];
@@ -125,6 +127,7 @@ export function useConversationMessages({
     }
   };
 
+  // Sends agent message, appends optimistic state and syncs conversation preview metadata.
   const sendMessage = async (text: string) => {
     if (!text.trim() || !selectedConversationId) return false;
 

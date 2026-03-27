@@ -1,12 +1,27 @@
 const COMPILED_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
 
+// Resolves runtime API base URL and guards local stale builds that point to frontend port.
 function resolveApiUrl() {
   // Prevent stale local builds from pointing API to frontend port 3001.
   if (typeof window !== "undefined") {
-    const host = window.location.hostname
-    const isLocalHost = host === "localhost" || host === "127.0.0.1"
+    const runtimeHost = window.location.hostname
+    const isLocalHost = runtimeHost === "localhost" || runtimeHost === "127.0.0.1"
+
     if (isLocalHost && COMPILED_API_URL === "http://localhost:3001") {
       return "http://localhost:3000"
+    }
+
+    // If frontend is opened from phone/tablet via LAN IP, avoid calling
+    // localhost from the device. Reuse the current host and keep API port.
+    try {
+      const compiled = new URL(COMPILED_API_URL)
+      const apiHostIsLocal = compiled.hostname === "localhost" || compiled.hostname === "127.0.0.1"
+
+      if (!isLocalHost && apiHostIsLocal) {
+        return `${compiled.protocol}//${runtimeHost}:${compiled.port || "3000"}`
+      }
+    } catch {
+      // Keep compiled URL if it is not a valid absolute URL.
     }
   }
 
@@ -26,6 +41,7 @@ export async function apiClient(
   const url = `${apiUrl}${endpoint}`
   console.log("API Request:", { url, method: options.method })
 
+  // Centralized HTTP layer: auth header, JSON defaults and unified error mapping.
   const res = await fetch(url, {
     ...options,
     headers: {

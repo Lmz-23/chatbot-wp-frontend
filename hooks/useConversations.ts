@@ -105,6 +105,7 @@ export function useConversations({ authLoading }: UseConversationsParams) {
   const getConversationById = (conversationId: string) =>
     conversations.find((c) => c.id === conversationId);
 
+  // Synchronizes list-level last message metadata from message hook updates.
   const onConversationLastMessageSync = (
     conversationId: string,
     patch: {
@@ -175,6 +176,7 @@ export function useConversations({ authLoading }: UseConversationsParams) {
     });
   };
 
+  // Loads conversations + leads snapshot and stitches fallback lead data by normalized phone.
   const fetchConversations = async () => {
     const isInitialLoad = !hasLoadedConversationsRef.current;
     try {
@@ -397,6 +399,10 @@ export function useConversations({ authLoading }: UseConversationsParams) {
     }
   };
 
+  const clearSelectedConversation = () => {
+    setSelectedConversationId(null);
+  };
+
   const sendMessage = async (text: string) => {
     const ok = await sendConversationMessage(text);
     if (ok && selectedConversationId && text.trim()) {
@@ -565,6 +571,7 @@ export function useConversations({ authLoading }: UseConversationsParams) {
     conversationListItems,
     selectedHeaderData,
     selectConversation,
+    clearSelectedConversation,
     sendMessage,
     updateConversationStatus,
     advanceLeadStatus

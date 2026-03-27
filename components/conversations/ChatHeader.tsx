@@ -17,6 +17,8 @@ interface ChatHeaderProps {
   leadActionLabel?: string;
   onLeadAction: () => void;
   leadActionDisabled: boolean;
+  mobileMode?: boolean;
+  onBackToList?: () => void;
 }
 
 export function ChatHeader({
@@ -33,31 +35,63 @@ export function ChatHeader({
   leadStatusClassName,
   leadActionLabel,
   onLeadAction,
-  leadActionDisabled
+  leadActionDisabled,
+  mobileMode = false,
+  onBackToList
 }: ChatHeaderProps) {
   return (
     <div className="sticky top-0 border-b border-border bg-card p-4 z-10">
+      {mobileMode && onBackToList && (
+        <button
+          type="button"
+          onClick={onBackToList}
+          className="mb-3 text-[14px] font-medium text-blue-600"
+        >
+          ← Volver a conversaciones
+        </button>
+      )}
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h3 className="text-lg font-semibold">{title}</h3>
           {subtitle && (
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
+            <p className="text-[12px] text-muted-foreground">{subtitle}</p>
+          )}
+
+          {mobileMode && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {attentionBadge && (
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] font-medium ${attentionBadge.className}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${attentionBadge.dotClassName}`} />
+                  {attentionBadge.text}
+                </span>
+              )}
+
+              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[12px] font-medium ${statusClassName}`}>
+                {statusLabel}
+              </span>
+
+              {hasLead && (
+                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[12px] font-medium ${leadStatusClassName || ''}`}>
+                  {leadStatusLabel}
+                </span>
+              )}
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className={`items-center gap-2 ${mobileMode ? 'hidden md:flex' : 'flex'}`}>
           {attentionBadge && (
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${attentionBadge.className}`}>
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] font-medium ${attentionBadge.className}`}>
               <span className={`h-1.5 w-1.5 rounded-full ${attentionBadge.dotClassName}`} />
               {attentionBadge.text}
             </span>
           )}
 
-          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusClassName}`}>
+          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[12px] font-medium ${statusClassName}`}>
             {statusLabel}
           </span>
 
           {showLeadReactivated && (
-            <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+            <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[12px] font-medium text-amber-700">
               Lead reactivado
             </span>
           )}
@@ -78,7 +112,7 @@ export function ChatHeader({
 
           {hasLead ? (
             <>
-              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${leadStatusClassName || ''}`}>
+              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[12px] font-medium ${leadStatusClassName || ''}`}>
                 {leadStatusLabel}
               </span>
               <button

@@ -56,6 +56,7 @@ export function useLeads() {
     return map;
   }, [leads]);
 
+  // Loads leads and conversation context, then computes attention/urgency metadata per lead.
   const fetchLeads = async () => {
     const isInitialLoad = !hasLoadedRef.current;
     try {
@@ -151,6 +152,7 @@ export function useLeads() {
     return () => clearInterval(intervalId);
   }, []);
 
+  // Applies optimistic lead updates with rollback on failure.
   const patchLead = async (
     leadId: string,
     payload: Partial<Pick<Lead, 'name' | 'status'>>,

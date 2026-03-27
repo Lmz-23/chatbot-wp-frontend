@@ -51,13 +51,13 @@ export function ConversationItem({
           <div className="flex items-center gap-2">
             <p className="font-medium text-foreground">{name}</p>
             {requiresAttention && attentionType === 'customer' && (
-              <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${attentionBadgeClassName || ''}`}>
+              <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] font-medium ${attentionBadgeClassName || ''}`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${attentionDotClassName || ''}`} />
                 {attentionText}
               </span>
             )}
             {requiresAttention && attentionType === 'bot' && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[12px] font-medium text-amber-700">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                 Falta agente
               </span>
@@ -71,7 +71,7 @@ export function ConversationItem({
         <p className="text-xs text-muted-foreground whitespace-nowrap">{formattedTime}</p>
       </div>
       <div className="mt-2">
-        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusClassName}`}>
+        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[12px] font-medium ${statusClassName}`}>
           {statusLabel}
         </span>
       </div>
