@@ -243,6 +243,15 @@ export function useLeads() {
     });
   }, [leads, onlyPending, searchQuery, selectedCategory]);
 
+  const metricCounts = useMemo(() => {
+    return {
+      total: leads.length,
+      NEW: leads.filter((lead) => lead.status === 'NEW').length,
+      CONTACTED: leads.filter((lead) => lead.status === 'CONTACTED').length,
+      QUALIFIED: leads.filter((lead) => lead.status === 'QUALIFIED').length
+    };
+  }, [leads]);
+
   const visibleStatusOptions = useMemo(() => {
     const base = selectedCategory === 'ALL' ? STATUS_OPTIONS : [selectedCategory];
     return onlyPending ? base.filter((status) => status !== 'CLOSED') : base;
@@ -313,6 +322,7 @@ export function useLeads() {
     onlyPending,
     selectedCategory,
     searchQuery,
+    metricCounts,
     hasAnyLeads: filteredLeads.length > 0,
     sections,
     setOnlyPending,
