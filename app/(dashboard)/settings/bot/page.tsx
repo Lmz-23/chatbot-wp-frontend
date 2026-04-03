@@ -122,6 +122,10 @@ function getNodePreview(message: string) {
 export default function BotSettingsPage() {
   const [nodes, setNodes] = useState<BotNode[]>([]);
   const [activeNodeId, setActiveNodeId] = useState<string>('start');
+  const [businessName, setBusinessName] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileNotice, setProfileNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +142,7 @@ export default function BotSettingsPage() {
     const loadFlow = async () => {
       setLoading(true);
       setError(null);
+      setProfileError(null);
 
       try {
         const response = await apiClient('/api/settings/bot');
@@ -164,6 +169,13 @@ export default function BotSettingsPage() {
 
         setNodes(normalizedNodes);
         setActiveNodeId(normalizedNodes.find((node) => node.id === 'start')?.id || normalizedNodes[0]?.id || 'start');
+
+        try {
+          const profile = await apiClient('/api/business/profile');
+          setBusinessName(typeof profile?.name === 'string' ? profile.name : '');
+        } catch (profileErr) {
+          setProfileError(profileErr instanceof Error ? profileErr.message : 'No se pudo cargar el perfil del negocio');
+        }
       } catch (loadErr) {
         setError(loadErr instanceof Error ? loadErr.message : 'No se pudo cargar el flujo del bot');
       } finally {
@@ -326,6 +338,36 @@ export default function BotSettingsPage() {
     }
   };
 
+  const saveBusinessProfile = async () => {
+    setProfileSaving(true);
+    setProfileError(null);
+    setProfileNotice(null);
+
+    try {
+      const trimmedName = normalizeText(businessName);
+      if (!trimmedName) {
+        throw new Error('El nombre del negocio es obligatorio');
+      }
+
+      if (trimmedName.length > 100) {
+        throw new Error('El nombre del negocio debe tener máximo 100 caracteres');
+      }
+
+      const updated = await apiClient('/api/business/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ name: trimmedName })
+      });
+
+      setBusinessName(typeof updated?.name === 'string' ? updated.name : trimmedName);
+      setProfileNotice('Nombre actualizado correctamente');
+      setTimeout(() => setProfileNotice(null), 2500);
+    } catch (profileSaveErr) {
+      setProfileError(profileSaveErr instanceof Error ? profileSaveErr.message : 'No se pudo actualizar el nombre del negocio');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <main className="min-h-screen bg-[#F6F7F9] px-4 pt-20 text-[#1B1D21]" style={{ fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
@@ -414,6 +456,44 @@ export default function BotSettingsPage() {
         </aside>
 
         <section className="flex flex-1 flex-col gap-4 p-4 md:p-8">
+          <article className="rounded-[12px] border border-[#D3D9E1] bg-white p-5" style={{ borderWidth: '0.5px' }}>
+            <h3 className="text-[13px] font-medium text-[#6F7782]">Perfil del negocio</h3>
+
+            <div className="mt-4">
+              <label className="mb-2 block text-[12px] text-[#6F7782] font-normal">Nombre del negocio</label>
+
+              <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                <input
+                  type="text"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="Ej: Clínica San Rafael"
+                  className="h-[34px] w-full rounded-[8px] border border-[#D3D9E1] bg-[#F3F5F7] px-3 text-[13px] font-normal text-[#1B1D21] outline-none"
+                  style={{ borderWidth: '0.5px' }}
+                />
+
+                <button
+                  type="button"
+                  onClick={saveBusinessProfile}
+                  disabled={profileSaving}
+                  className="h-[34px] rounded-[8px] border border-transparent bg-[#185FA5] px-4 text-[13px] font-medium text-white disabled:opacity-60"
+                >
+                  {profileSaving ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+
+              <p className="mt-2 text-[11px] text-[#6F7782] font-normal">Este nombre aparecerá automáticamente en los mensajes del bot</p>
+
+              {profileNotice && (
+                <p className="mt-2 text-[11px] text-[#1D9E75] font-medium">{profileNotice}</p>
+              )}
+
+              {profileError && (
+                <p className="mt-2 text-[11px] text-[#B42318] font-normal">{profileError}</p>
+              )}
+            </div>
+          </article>
+
           {!activeNode ? (
             <div className="rounded-[12px] border border-[#D3D9E1] bg-white p-6 text-[14px] text-[#6F7782]" style={{ borderWidth: '0.5px' }}>
               Selecciona o crea un nodo para empezar.

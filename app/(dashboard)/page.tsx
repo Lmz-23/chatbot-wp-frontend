@@ -43,7 +43,7 @@ const ownerTools: Tool[] = [
   {
     title: 'Configuración',
     description: 'Ajusta el bot, reglas de respuesta automática y datos del negocio.',
-    href: '/settings',
+    href: '/settings/bot',
     icon: 'settings',
     iconBg: '#F1F3F5',
     iconColor: '#6B7280'
