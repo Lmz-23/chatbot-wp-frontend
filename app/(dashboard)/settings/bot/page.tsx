@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { apiClient } from '@/lib/api/apiClient';
+import { useAuth } from '@/hooks';
 
 type BotTransition = {
   keywords: string[];
@@ -120,6 +122,9 @@ function getNodePreview(message: string) {
 }
 
 export default function BotSettingsPage() {
+  const searchParams = useSearchParams();
+  const { user } = useAuth();
+
   const [nodes, setNodes] = useState<BotNode[]>([]);
   const [activeNodeId, setActiveNodeId] = useState<string>('start');
   const [businessName, setBusinessName] = useState('');
@@ -137,6 +142,12 @@ export default function BotSettingsPage() {
   );
 
   const nodeIds = useMemo(() => nodes.map((node) => node.id).filter(Boolean), [nodes]);
+  const requestedBusinessId = (searchParams.get('businessId') || '').trim();
+  const isPlatformAdmin = user?.platformRole === 'PLATFORM_ADMIN';
+  const isAdminScopedView = isPlatformAdmin && requestedBusinessId.length > 0;
+  const botSettingsEndpoint = isAdminScopedView
+    ? `/api/settings/bot?businessId=${encodeURIComponent(requestedBusinessId)}`
+    : '/api/settings/bot';
 
   useEffect(() => {
     const loadFlow = async () => {
@@ -145,7 +156,7 @@ export default function BotSettingsPage() {
       setProfileError(null);
 
       try {
-        const response = await apiClient('/api/settings/bot');
+        const response = await apiClient(botSettingsEndpoint);
         const loadedNodes = Array.isArray(response?.nodes) ? response.nodes : [];
 
         const normalizedNodes = sanitizeNodes(
@@ -170,11 +181,15 @@ export default function BotSettingsPage() {
         setNodes(normalizedNodes);
         setActiveNodeId(normalizedNodes.find((node) => node.id === 'start')?.id || normalizedNodes[0]?.id || 'start');
 
-        try {
-          const profile = await apiClient('/api/business/profile');
-          setBusinessName(typeof profile?.name === 'string' ? profile.name : '');
-        } catch (profileErr) {
-          setProfileError(profileErr instanceof Error ? profileErr.message : 'No se pudo cargar el perfil del negocio');
+        if (!isAdminScopedView) {
+          try {
+            const profile = await apiClient('/api/business/profile');
+            setBusinessName(typeof profile?.name === 'string' ? profile.name : '');
+          } catch (profileErr) {
+            setProfileError(profileErr instanceof Error ? profileErr.message : 'No se pudo cargar el perfil del negocio');
+          }
+        } else {
+          setBusinessName('');
         }
       } catch (loadErr) {
         setError(loadErr instanceof Error ? loadErr.message : 'No se pudo cargar el flujo del bot');
@@ -184,7 +199,7 @@ export default function BotSettingsPage() {
     };
 
     loadFlow();
-  }, []);
+  }, [botSettingsEndpoint, isAdminScopedView]);
 
   useEffect(() => {
     if (!activeNode && nodes.length > 0) {
@@ -319,7 +334,7 @@ export default function BotSettingsPage() {
         throw new Error('Todos los nodos deben tener un id válido');
       }
 
-      const response = await apiClient('/api/settings/bot', {
+      const response = await apiClient(botSettingsEndpoint, {
         method: 'PUT',
         body: JSON.stringify({ nodes: normalizedNodes })
       });
@@ -339,6 +354,10 @@ export default function BotSettingsPage() {
   };
 
   const saveBusinessProfile = async () => {
+    if (isAdminScopedView) {
+      return;
+    }
+
     setProfileSaving(true);
     setProfileError(null);
     setProfileNotice(null);
@@ -456,7 +475,8 @@ export default function BotSettingsPage() {
         </aside>
 
         <section className="flex flex-1 flex-col gap-4 p-4 md:p-8">
-          <article className="rounded-[12px] border border-[#D3D9E1] bg-white p-5" style={{ borderWidth: '0.5px' }}>
+          {!isAdminScopedView && (
+            <article className="rounded-[12px] border border-[#D3D9E1] bg-white p-5" style={{ borderWidth: '0.5px' }}>
             <h3 className="text-[13px] font-medium text-[#6F7782]">Perfil del negocio</h3>
 
             <div className="mt-4">
@@ -492,7 +512,8 @@ export default function BotSettingsPage() {
                 <p className="mt-2 text-[11px] text-[#B42318] font-normal">{profileError}</p>
               )}
             </div>
-          </article>
+            </article>
+          )}
 
           {!activeNode ? (
             <div className="rounded-[12px] border border-[#D3D9E1] bg-white p-6 text-[14px] text-[#6F7782]" style={{ borderWidth: '0.5px' }}>

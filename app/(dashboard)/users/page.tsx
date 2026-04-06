@@ -34,8 +34,11 @@ function getInitials(email: string) {
   return (clean.slice(0, 2) || 'US').toUpperCase();
 }
 
-function roleBadgeClass(role: 'ADMIN' | 'AGENT') {
-  if (role === 'ADMIN') return 'bg-[#E6F1FB] text-[#0C447C]';
+type RenderRole = 'PLATFORM_ADMIN' | 'OWNER' | 'AGENT';
+
+function roleBadgeClass(role: RenderRole) {
+  if (role === 'PLATFORM_ADMIN') return 'bg-[#E6F1FB] text-[#0C447C]';
+  if (role === 'OWNER') return 'bg-[#FAEEDA] text-[#633806]';
   return 'bg-[#EAF3DE] text-[#27500A]';
 }
 
@@ -43,12 +46,19 @@ function statusBadgeClass(isActive: boolean) {
   return isActive ? 'bg-[#EAF3DE] text-[#27500A]' : 'bg-[#FCEBEB] text-[#791F1F]';
 }
 
-function toRoleType(user: BusinessUser, profile: ProfileResponse | null): 'ADMIN' | 'AGENT' {
-  if (user.business_role === 'OWNER') return 'ADMIN';
+function toRoleType(user: BusinessUser, profile: ProfileResponse | null): RenderRole {
+  if (user.platform_role === 'PLATFORM_ADMIN') return 'PLATFORM_ADMIN';
+  if (user.business_role === 'OWNER') return 'OWNER';
   if (user.business_role === 'AGENT') return 'AGENT';
-  if (profile && profile.userId === user.id && profile.businessRole === 'OWNER') return 'ADMIN';
-  if (user.platform_role === 'PLATFORM_ADMIN') return 'ADMIN';
+  if (profile && profile.userId === user.id && profile.platformRole === 'PLATFORM_ADMIN') return 'PLATFORM_ADMIN';
+  if (profile && profile.userId === user.id && profile.businessRole === 'OWNER') return 'OWNER';
   return 'AGENT';
+}
+
+function roleLabel(role: RenderRole) {
+  if (role === 'PLATFORM_ADMIN') return 'Administrador de plataforma';
+  if (role === 'OWNER') return 'Propietario';
+  return 'Agente';
 }
 
 async function proxyClient<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -114,10 +124,9 @@ export default function UsersPage() {
 
   const isOwner = profile?.businessRole === 'OWNER';
 
-  const myRoleType = useMemo<'ADMIN' | 'AGENT'>(() => {
-    if (profile?.businessRole === 'OWNER' || profile?.platformRole === 'PLATFORM_ADMIN') {
-      return 'ADMIN';
-    }
+  const myRoleType = useMemo<RenderRole>(() => {
+    if (profile?.platformRole === 'PLATFORM_ADMIN') return 'PLATFORM_ADMIN';
+    if (profile?.businessRole === 'OWNER') return 'OWNER';
     return 'AGENT';
   }, [profile]);
 
@@ -309,7 +318,7 @@ export default function UsersPage() {
 
               <div>
                 <span className={`inline-flex rounded-full px-3 py-1 text-[12px] font-medium ${roleBadgeClass(myRoleType)}`}>
-                  {myRoleType === 'ADMIN' ? 'Administrador' : 'Agente'}
+                  {roleLabel(myRoleType)}
                 </span>
               </div>
 
@@ -399,7 +408,7 @@ export default function UsersPage() {
                             <p className="truncate text-[13px] text-[#1B1D21] font-medium">{user.email}</p>
                             <div className="mt-1 flex items-center gap-2">
                               <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-medium ${roleBadgeClass(roleType)}`}>
-                                {roleType === 'ADMIN' ? 'Administrador' : 'Agente'}
+                                {roleLabel(roleType)}
                               </span>
 
                               <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium ${statusBadgeClass(user.is_active)}`}>
@@ -486,7 +495,7 @@ export default function UsersPage() {
                           className="h-[34px] w-full rounded-[8px] border border-[#D3D9E1] bg-[#F3F5F7] px-3 text-[13px] text-[#1B1D21] font-normal outline-none"
                           style={{ borderWidth: '0.5px' }}
                         >
-                          <option value="OWNER">Administrador</option>
+                          <option value="OWNER">Propietario</option>
                           <option value="AGENT">Agente</option>
                         </select>
                       </div>

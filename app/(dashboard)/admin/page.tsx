@@ -18,7 +18,6 @@ type PlatformStats = {
 type AdminBusiness = {
   id: string;
   name: string;
-  email: string | null;
   phone_number: string | null;
   is_active: boolean;
   created_at: string;
@@ -61,9 +60,13 @@ export default function AdminPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [businessToDelete, setBusinessToDelete] = useState<AdminBusiness | null>(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteSaving, setDeleteSaving] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState({
     name: '',
-    email: '',
     phone_number: '',
     owner_email: '',
     owner_password: '',
@@ -168,11 +171,6 @@ export default function AdminPage() {
       return;
     }
 
-    if (!createForm.email.trim()) {
-      setCreateError('El email del negocio es obligatorio');
-      return;
-    }
-
     if (!createForm.owner_email.trim()) {
       setCreateError('El email del propietario es obligatorio');
       return;
@@ -194,7 +192,6 @@ export default function AdminPage() {
         method: 'POST',
         body: JSON.stringify({
           name: createForm.name.trim(),
-          email: createForm.email.trim(),
           phone_number: createForm.phone_number.trim() || null,
           owner_email: createForm.owner_email.trim(),
           owner_password: createForm.owner_password
@@ -203,7 +200,6 @@ export default function AdminPage() {
 
       setCreateForm({
         name: '',
-        email: '',
         phone_number: '',
         owner_email: '',
         owner_password: '',
@@ -215,6 +211,46 @@ export default function AdminPage() {
       setCreateError(err instanceof Error ? err.message : 'No se pudo crear el negocio');
     } finally {
       setCreateSaving(false);
+    }
+  };
+
+  const openDeleteModal = (business: AdminBusiness) => {
+    setDeleteError(null);
+    setDeletePassword('');
+    setBusinessToDelete(business);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteBusiness = async (event: FormEvent) => {
+    event.preventDefault();
+    setDeleteError(null);
+
+    if (!businessToDelete) {
+      setDeleteError('No se seleccionó un negocio para eliminar');
+      return;
+    }
+
+    if (!deletePassword) {
+      setDeleteError('Debes ingresar la contraseña de administrador');
+      return;
+    }
+
+    setDeleteSaving(true);
+    try {
+      await apiClient(`/api/admin/businesses/${businessToDelete.id}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ adminPassword: deletePassword })
+      });
+
+      setBusinesses((prev) => prev.filter((item) => item.id !== businessToDelete.id));
+      setShowDeleteModal(false);
+      setBusinessToDelete(null);
+      setDeletePassword('');
+      await loadData();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'No se pudo eliminar el negocio');
+    } finally {
+      setDeleteSaving(false);
     }
   };
 
@@ -289,7 +325,7 @@ export default function AdminPage() {
                     <div className="min-w-0">
                       <p className="truncate text-[15px] text-[#1B1D21] font-medium">{business.name}</p>
                       <p className="mt-1 truncate text-[12px] text-[#6F7782] font-normal">
-                        {business.email || 'Sin email'} · {business.phone_number || 'Sin telefono'}
+                        {business.phone_number || 'Sin telefono'}
                       </p>
                       <p className="mt-1 text-[11px] text-[#9AA2AE] font-normal">
                         Creado: {formatDate(business.created_at)} · Usuarios: {business.users_count} · Conversaciones: {business.conversations_count}
@@ -329,6 +365,15 @@ export default function AdminPage() {
                     >
                       Gestionar
                     </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => openDeleteModal(business)}
+                      className="inline-flex h-[34px] items-center rounded-[8px] border border-[#E9B8B8] px-3 text-[13px] text-[#B42318] font-medium"
+                      style={{ borderWidth: '0.5px', backgroundColor: '#FFF8F8' }}
+                    >
+                      Eliminar
+                    </button>
                   </div>
                 </div>
               </article>
@@ -357,17 +402,6 @@ export default function AdminPage() {
                   type="text"
                   value={createForm.name}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
-                  className="h-[36px] w-full rounded-[8px] border border-[#D3D9E1] bg-[#F3F5F7] px-3 text-[13px] text-[#1B1D21] font-normal outline-none"
-                  style={{ borderWidth: '0.5px' }}
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-[12px] text-[#6F7782] font-normal">Email del negocio</label>
-                <input
-                  type="email"
-                  value={createForm.email}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, email: e.target.value }))}
                   className="h-[36px] w-full rounded-[8px] border border-[#D3D9E1] bg-[#F3F5F7] px-3 text-[13px] text-[#1B1D21] font-normal outline-none"
                   style={{ borderWidth: '0.5px' }}
                 />
@@ -438,6 +472,62 @@ export default function AdminPage() {
                   className="h-[34px] rounded-[8px] bg-[#185FA5] px-4 text-[13px] text-white font-medium disabled:opacity-60"
                 >
                   {createSaving ? 'Creando...' : 'Crear negocio'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showDeleteModal && businessToDelete && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(0,0,0,0.45)] p-4">
+          <div className="w-full max-w-[460px] rounded-[12px] border border-[#D3D9E1] bg-white p-5" style={{ borderWidth: '0.5px' }}>
+            <h3 className="text-[14px] text-[#1B1D21] font-medium">Eliminar negocio</h3>
+            <p className="mt-2 text-[12px] text-[#6F7782] font-normal">
+              ¿Estas seguro de borrar este negocio? Esta accion no se puede deshacer.
+            </p>
+            <p className="mt-2 text-[12px] text-[#6F7782] font-normal">
+              Para confirmar, ingresa la contraseña de administrador.
+            </p>
+
+            <div className="mt-3 rounded-[8px] border border-[#E9E3D5] bg-[#FFFAEF] px-3 py-2 text-[12px] text-[#633806]" style={{ borderWidth: '0.5px' }}>
+              Negocio: {businessToDelete.name}
+            </div>
+
+            <form onSubmit={handleDeleteBusiness} className="mt-4 space-y-3">
+              <div>
+                <label className="mb-2 block text-[12px] text-[#6F7782] font-normal">Contraseña de administrador</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  className="h-[36px] w-full rounded-[8px] border border-[#D3D9E1] bg-[#F3F5F7] px-3 text-[13px] text-[#1B1D21] font-normal outline-none"
+                  style={{ borderWidth: '0.5px' }}
+                />
+              </div>
+
+              {deleteError && <p className="text-[12px] text-[#B42318] font-normal">{deleteError}</p>}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setBusinessToDelete(null);
+                    setDeletePassword('');
+                    setDeleteError(null);
+                  }}
+                  className="h-[34px] rounded-[8px] border border-[#D3D9E1] bg-white px-4 text-[13px] text-[#3E434B] font-medium"
+                  style={{ borderWidth: '0.5px' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={deleteSaving}
+                  className="h-[34px] rounded-[8px] bg-[#B42318] px-4 text-[13px] text-white font-medium disabled:opacity-60"
+                >
+                  {deleteSaving ? 'Eliminando...' : 'Eliminar negocio'}
                 </button>
               </div>
             </form>

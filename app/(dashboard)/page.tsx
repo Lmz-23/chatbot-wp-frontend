@@ -53,9 +53,9 @@ const ownerTools: Tool[] = [
 ];
 
 function getRoleLabel(platformRole?: string, businessRole?: string | null) {
-  if (businessRole === 'OWNER') return 'Administrador';
+  if (platformRole === 'PLATFORM_ADMIN') return 'Administrador de plataforma';
+  if (businessRole === 'OWNER') return 'Propietario';
   if (businessRole === 'AGENT') return 'Agente';
-  if (platformRole === 'PLATFORM_ADMIN') return 'Administrador';
   return 'Usuario';
 }
 

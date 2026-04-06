@@ -19,7 +19,6 @@ type BusinessDetail = {
   business: {
     id: string;
     name: string;
-    email: string | null;
     phone_number: string | null;
     is_active: boolean;
     created_at: string;
@@ -46,7 +45,7 @@ function getInitials(email: string) {
 }
 
 function roleBadgeClass(role: 'OWNER' | 'AGENT') {
-  if (role === 'OWNER') return 'bg-[#E6F1FB] text-[#0C447C]';
+  if (role === 'OWNER') return 'bg-[#FAEEDA] text-[#633806]';
   return 'bg-[#EAF3DE] text-[#27500A]';
 }
 
@@ -72,7 +71,6 @@ export default function AdminBusinessDetailPage() {
 
   const [detail, setDetail] = useState<BusinessDetail | null>(null);
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
 
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
@@ -107,7 +105,6 @@ export default function AdminBusinessDetailPage() {
       const payload = response as { data: BusinessDetail };
       setDetail(payload.data);
       setName(payload.data.business.name || '');
-      setEmail(payload.data.business.email || '');
       setPhoneNumber(payload.data.business.phone_number || '');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar el negocio');
@@ -133,18 +130,12 @@ export default function AdminBusinessDetailPage() {
       return;
     }
 
-    if (!email.trim()) {
-      setError('El email del negocio es obligatorio');
-      return;
-    }
-
     setSaving(true);
     try {
       const response = await apiClient(`/api/admin/businesses/${businessId}`, {
         method: 'PUT',
         body: JSON.stringify({
           name: name.trim(),
-          email: email.trim(),
           phone_number: phoneNumber.trim() || null
         })
       });
@@ -268,17 +259,6 @@ export default function AdminBusinessDetailPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-[12px] text-[#6F7782] font-normal">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-[34px] w-full rounded-[8px] border border-[#D3D9E1] bg-[#F3F5F7] px-3 text-[13px] text-[#1B1D21] font-normal outline-none"
-                  style={{ borderWidth: '0.5px' }}
-                />
-              </div>
-
-              <div>
                 <label className="mb-2 block text-[12px] text-[#6F7782] font-normal">Telefono</label>
                 <input
                   type="text"
@@ -333,7 +313,7 @@ export default function AdminBusinessDetailPage() {
                       <p className="truncate text-[13px] text-[#1B1D21] font-medium">{userItem.email}</p>
                       <div className="mt-1 flex items-center gap-2">
                         <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-medium ${roleBadgeClass(userItem.business_role)}`}>
-                          {userItem.business_role === 'OWNER' ? 'Administrador' : 'Agente'}
+                          {userItem.business_role === 'OWNER' ? 'Propietario' : 'Agente'}
                         </span>
 
                         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium ${statusBadgeClass(userItem.is_active)}`}>
@@ -383,6 +363,9 @@ export default function AdminBusinessDetailPage() {
 
           <article className="rounded-[12px] border border-[#D3D9E1] bg-white p-5" style={{ borderWidth: '0.5px' }}>
             <h2 className="text-[13px] text-[#6F7782] font-medium">Estado de conexion WhatsApp</h2>
+            <p className="mt-2 text-[11px] text-[#6F7782] font-normal">
+              El numero de WhatsApp se configura directamente en Meta Business Manager y se conecta automaticamente al recibir el primer mensaje.
+            </p>
 
             <div className="mt-3 flex items-center justify-between gap-3">
               <div>
@@ -459,7 +442,7 @@ export default function AdminBusinessDetailPage() {
                   className="h-[34px] w-full rounded-[8px] border border-[#D3D9E1] bg-[#F3F5F7] px-3 text-[13px] text-[#1B1D21] font-normal outline-none"
                   style={{ borderWidth: '0.5px' }}
                 >
-                  <option value="OWNER">Administrador</option>
+                  <option value="OWNER">Propietario</option>
                   <option value="AGENT">Agente</option>
                 </select>
               </div>
