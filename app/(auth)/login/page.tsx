@@ -45,7 +45,10 @@ export default function LoginPage() {
       }
 
       localStorage.setItem("token", response.token);
-      router.replace("/");
+
+      const profile = await apiClient('/auth/me');
+      const isPlatformAdmin = profile?.platformRole === 'PLATFORM_ADMIN';
+      router.replace(isPlatformAdmin ? '/admin' : '/');
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Error al intentar login";

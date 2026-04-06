@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks';
 
 type Tool = {
@@ -41,8 +43,8 @@ const ownerTools: Tool[] = [
     iconColor: '#9A6700'
   },
   {
-    title: 'Configuración',
-    description: 'Ajusta el bot, reglas de respuesta automática y datos del negocio.',
+    title: 'Configuracion',
+    description: 'Ajusta el bot, reglas de respuesta automatica y datos del negocio.',
     href: '/settings/bot',
     icon: 'settings',
     iconBg: '#F1F3F5',
@@ -106,29 +108,31 @@ function ToolIcon({ icon, color }: { icon: Tool['icon']; color: string }) {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { user, loading, logout } = useAuth();
-
-  if (loading) {
-    return <div className="p-6">Loading...</div>;
-  }
 
   const isPlatformAdmin = user?.platformRole === 'PLATFORM_ADMIN';
   const isOwner = user?.businessRole === 'OWNER';
   const isAgent = user?.businessRole === 'AGENT';
+
+  useEffect(() => {
+    if (!loading && isPlatformAdmin) {
+      router.replace('/admin');
+    }
+  }, [loading, isPlatformAdmin, router]);
+
+  if (loading || isPlatformAdmin) {
+    return <div className="p-6">Loading...</div>;
+  }
+
   const roleLabel = getRoleLabel(user?.platformRole, user?.businessRole);
+  const tools: Tool[] = isOwner ? [...baseTools, ...ownerTools] : baseTools;
 
-  let tools: Tool[] = baseTools;
-
-  if (isPlatformAdmin || isOwner) {
-    tools = [...baseTools, ...ownerTools];
-  } else if (isAgent) {
-    tools = baseTools;
-  } else {
+  if (!isOwner && !isAgent) {
     console.warn('Unrecognized role in dashboard hub', {
       platformRole: user?.platformRole,
       businessRole: user?.businessRole
     });
-    tools = baseTools;
   }
 
   return (
@@ -153,7 +157,7 @@ export default function DashboardPage() {
               onClick={logout}
               className="h-8 rounded-[8px] border border-[#D7DCE3] bg-transparent px-4 text-[12px] leading-none text-[#3E434B] font-normal"
             >
-              Cerrar sesión
+              Cerrar sesion
             </button>
           </div>
         </div>
@@ -161,7 +165,7 @@ export default function DashboardPage() {
 
       <div className="mx-auto max-w-[1200px] px-8 pb-10 pt-[108px]">
         <section>
-          <h1 className="text-[20px] leading-[1.2] text-[#1B1D21] font-medium">¿Qué quieres gestionar hoy?</h1>
+          <h1 className="text-[20px] leading-[1.2] text-[#1B1D21] font-medium">Que quieres gestionar hoy?</h1>
           <p className="mt-2 text-[13px] leading-[1.4] text-[#7A828E] font-normal">Selecciona una herramienta para continuar</p>
         </section>
 
