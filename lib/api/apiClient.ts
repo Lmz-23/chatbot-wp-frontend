@@ -1,3 +1,5 @@
+import { clearAuthSession, getToken } from "@/lib/auth/tokenStore"
+
 const COMPILED_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
 
 // Resolves runtime API base URL and guards local stale builds that point to frontend port.
@@ -32,10 +34,7 @@ export async function apiClient(
   endpoint: string,
   options: RequestInit = {}
 ) {
-  const token =
-    typeof window !== "undefined"
-      ? localStorage.getItem("token")
-      : null
+  const token = getToken()
 
   const apiUrl = resolveApiUrl()
   const url = `${apiUrl}${endpoint}`
@@ -55,7 +54,7 @@ export async function apiClient(
 
   if (res.status === 401 && !isAuthEndpoint) {
     if (typeof window !== "undefined") {
-      localStorage.removeItem("token")
+      clearAuthSession()
       window.location.href = "/login"
     }
     return

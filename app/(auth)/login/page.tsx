@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api/apiClient";
+import { markSessionActive, setToken } from "@/lib/auth/tokenStore";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -44,7 +45,8 @@ export default function LoginPage() {
         throw new Error("No token in response");
       }
 
-      localStorage.setItem("token", response.token);
+      setToken(response.token);
+      markSessionActive();
 
       const profile = await apiClient('/auth/me');
       const isPlatformAdmin = profile?.platformRole === 'PLATFORM_ADMIN';
