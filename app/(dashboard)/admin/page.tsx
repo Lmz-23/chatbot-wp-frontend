@@ -5,6 +5,8 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks';
 import { apiClient } from '@/lib/api/apiClient';
+import { PasswordRequirementsHint } from '@/components/security/PasswordRequirementsHint';
+import { evaluatePasswordRules, hasFailedPasswordRule } from '@/lib/security/passwordRules';
 
 type PlatformStats = {
   active_businesses: number;
@@ -74,6 +76,10 @@ export default function AdminPage() {
   });
 
   const isPlatformAdmin = user?.platformRole === 'PLATFORM_ADMIN';
+  const ownerPasswordRules = useMemo(
+    () => evaluatePasswordRules(createForm.owner_password),
+    [createForm.owner_password]
+  );
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -176,8 +182,8 @@ export default function AdminPage() {
       return;
     }
 
-    if (createForm.owner_password.length < 8) {
-      setCreateError('La contrasena del propietario debe tener minimo 8 caracteres');
+    if (hasFailedPasswordRule(ownerPasswordRules)) {
+      setCreateError('La contrasena del propietario no cumple con los requisitos minimos');
       return;
     }
 
@@ -434,7 +440,10 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-[12px] text-[#6F7782] font-normal">Contrasena del owner</label>
+                <div className="mb-2 flex items-center gap-2">
+                  <label className="block text-[12px] text-[#6F7782] font-normal">Contrasena del owner</label>
+                  <PasswordRequirementsHint rules={ownerPasswordRules} />
+                </div>
                 <input
                   type="password"
                   value={createForm.owner_password}

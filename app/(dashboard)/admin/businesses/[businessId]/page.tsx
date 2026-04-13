@@ -5,6 +5,8 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks';
 import { apiClient } from '@/lib/api/apiClient';
+import { PasswordRequirementsHint } from '@/components/security/PasswordRequirementsHint';
+import { evaluatePasswordRules, hasFailedPasswordRule } from '@/lib/security/passwordRules';
 
 type BusinessUser = {
   id: string;
@@ -84,6 +86,10 @@ export default function AdminBusinessDetailPage() {
 
   const businessId = String(params?.businessId || '');
   const isPlatformAdmin = user?.platformRole === 'PLATFORM_ADMIN';
+  const createPasswordRules = useMemo(
+    () => evaluatePasswordRules(createPassword),
+    [createPassword]
+  );
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -183,8 +189,8 @@ export default function AdminBusinessDetailPage() {
       return;
     }
 
-    if (createPassword.length < 8) {
-      setCreateUserError('La contrasena debe tener minimo 8 caracteres');
+    if (hasFailedPasswordRule(createPasswordRules)) {
+      setCreateUserError('La contrasena no cumple con los requisitos minimos');
       return;
     }
 
@@ -413,7 +419,10 @@ export default function AdminBusinessDetailPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-[12px] text-[#6F7782] font-normal">Contrasena</label>
+                <div className="mb-2 flex items-center gap-2">
+                  <label className="block text-[12px] text-[#6F7782] font-normal">Contrasena</label>
+                  <PasswordRequirementsHint rules={createPasswordRules} />
+                </div>
                 <input
                   type="password"
                   value={createPassword}

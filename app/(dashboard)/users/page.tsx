@@ -5,6 +5,8 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks';
 import { apiClient } from '@/lib/api/apiClient';
+import { PasswordRequirementsHint } from '@/components/security/PasswordRequirementsHint';
+import { evaluatePasswordRules, hasFailedPasswordRule } from '@/lib/security/passwordRules';
 
 type ProfileResponse = {
   ok?: boolean;
@@ -61,74 +63,48 @@ function roleLabel(role: RenderRole) {
   return 'Agente';
 }
 
-async function proxyClient<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-
-  const response = await fetch(endpoint, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers
-    }
-  });
-
-  const contentType = response.headers.get('content-type') || '';
-  const isJson = contentType.includes('application/json');
-  const body = isJson ? await response.json() : await response.text();
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-      }
-      throw new Error('invalid_token');
-    }
-
-    if (isJson && body && typeof body === 'object') {
-      const errorData = body as { error?: string; message?: string };
-      throw new Error(errorData.error || errorData.message || 'request_failed');
-    }
-
-    throw new Error(typeof body === 'string' ? body : 'request_failed');
-  }
-
-  return body as T;
-}
-
 export default function UsersPage() {
   const router = useRouter();
   const { loading: authLoading, isAuthenticated } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<ProfileResponse | null>(null);
-  const [users, setUsers] = useState<BusinessUser[]>([]);
-  const [listError, setListError] = useState<string | null>(null);
+  const [profile, setProfile] = useState(null as ProfileResponse | null);
+  const [users, setUsers] = useState([] as BusinessUser[]);
+  const [listError, setListError] = useState(null as string | null);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
-  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState(null as string | null);
+  const [passwordError, setPasswordError] = useState(null as string | null);
 
-  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
+  const [togglingUserId, setTogglingUserId] = useState(null as string | null);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createEmail, setCreateEmail] = useState('');
   const [createPassword, setCreatePassword] = useState('');
-  const [createRole, setCreateRole] = useState<'OWNER' | 'AGENT'>('AGENT');
+  const [createRole, setCreateRole] = useState('AGENT' as 'OWNER' | 'AGENT');
   const [createSaving, setCreateSaving] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState(null as string | null);
 
   const isOwner = profile?.businessRole === 'OWNER';
 
-  const myRoleType = useMemo<RenderRole>(() => {
+  const myRoleType = useMemo(() => {
     if (profile?.platformRole === 'PLATFORM_ADMIN') return 'PLATFORM_ADMIN';
     if (profile?.businessRole === 'OWNER') return 'OWNER';
     return 'AGENT';
-  }, [profile]);
+  }, [profile]) as RenderRole;
+
+  const createPasswordRules = useMemo(
+    () => evaluatePasswordRules(createPassword),
+    [createPassword]
+  );
+
+  const updatePasswordRules = useMemo(
+    () => evaluatePasswordRules(newPassword),
+    [newPassword]
+  );
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -143,11 +119,11 @@ export default function UsersPage() {
       setLoading(true);
       setListError(null);
       try {
-        const profileResponse = await proxyClient<ProfileResponse>('/api/user/profile');
+        const profileResponse = await apiClient('/auth/me') as ProfileResponse;
         setProfile(profileResponse);
 
         if (profileResponse.businessRole === 'OWNER') {
-          const usersResponse = await proxyClient<{ ok: boolean; users: BusinessUser[] }>('/api/users');
+          const usersResponse = await apiClient('/api/users') as { ok: boolean; users: BusinessUser[] };
           setUsers(Array.isArray(usersResponse?.users) ? usersResponse.users : []);
         }
       } catch (err) {
@@ -162,7 +138,7 @@ export default function UsersPage() {
 
   const reloadUsers = async () => {
     if (!isOwner) return;
-    const usersResponse = await proxyClient<{ ok: boolean; users: BusinessUser[] }>('/api/users');
+    const usersResponse = await apiClient('/api/users') as { ok: boolean; users: BusinessUser[] };
     setUsers(Array.isArray(usersResponse?.users) ? usersResponse.users : []);
   };
 
@@ -176,8 +152,8 @@ export default function UsersPage() {
       return;
     }
 
-    if (newPassword.length < 8) {
-      setPasswordError('La nueva contraseña debe tener mínimo 8 caracteres');
+    if (hasFailedPasswordRule(updatePasswordRules)) {
+      setPasswordError('La nueva contraseña no cumple con los requisitos minimos');
       return;
     }
 
@@ -241,14 +217,14 @@ export default function UsersPage() {
       return;
     }
 
-    if (createPassword.length < 8) {
-      setCreateError('La contraseña debe tener mínimo 8 caracteres');
+    if (hasFailedPasswordRule(createPasswordRules)) {
+      setCreateError('La contraseña no cumple con los requisitos minimos');
       return;
     }
 
     setCreateSaving(true);
     try {
-      await proxyClient<{ ok: boolean; user: BusinessUser }>('/api/users', {
+      await apiClient('/api/users', {
         method: 'POST',
         body: JSON.stringify({
           email: createEmail.trim(),
@@ -339,7 +315,10 @@ export default function UsersPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-[12px] text-[#6F7782] font-normal">Nueva contraseña</label>
+                  <div className="mb-2 flex items-center gap-2">
+                    <label className="block text-[12px] text-[#6F7782] font-normal">Nueva contraseña</label>
+                    <PasswordRequirementsHint rules={updatePasswordRules} />
+                  </div>
                   <input
                     type="password"
                     value={newPassword}
@@ -347,7 +326,6 @@ export default function UsersPage() {
                     className="h-[34px] w-full rounded-[8px] border border-[#D3D9E1] bg-[#F3F5F7] px-3 text-[13px] text-[#1B1D21] font-normal outline-none"
                     style={{ borderWidth: '0.5px' }}
                   />
-                  <p className="mt-2 text-[11px] text-[#6F7782] font-normal">Mínimo 8 caracteres</p>
                 </div>
 
                 <div>
@@ -477,7 +455,10 @@ export default function UsersPage() {
                       </div>
 
                       <div>
-                        <label className="mb-2 block text-[12px] text-[#6F7782] font-normal">Contraseña</label>
+                        <div className="mb-2 flex items-center gap-2">
+                          <label className="block text-[12px] text-[#6F7782] font-normal">Contraseña</label>
+                          <PasswordRequirementsHint rules={createPasswordRules} />
+                        </div>
                         <input
                           type="password"
                           value={createPassword}
