@@ -12,6 +12,10 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
+/**
+ * Intenta refrescar token usando credenciales existentes (cookie/sesion).
+ * @returns {Promise<boolean>} true si obtuvo un nuevo token valido.
+ */
 async function refreshTokenIfPossible() {
   try {
     const res = await fetch(`${API_URL}/auth/refresh`, {
@@ -32,6 +36,10 @@ async function refreshTokenIfPossible() {
   }
 }
 
+/**
+ * Redirige al login evitando recargas innecesarias en la misma ruta.
+ * @returns {void} Sin retorno.
+ */
 function redirectToLogin() {
   if (typeof window === 'undefined') return;
   if (window.location.pathname !== '/login') {
@@ -39,6 +47,10 @@ function redirectToLogin() {
   }
 }
 
+/**
+ * Gestiona sesion autenticada del frontend con token en memoria.
+ * @returns {{ user: User | null, loading: boolean, isAuthenticated: boolean, logout: () => void }} Estado y acciones de autenticacion.
+ */
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);

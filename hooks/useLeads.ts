@@ -30,6 +30,10 @@ interface LeadSectionViewModel {
   items: LeadItemViewModel[];
 }
 
+/**
+ * Gestiona carga, segmentacion y actualizacion optimista del pipeline de leads.
+ * @returns {object} Estado de leads, metricas y acciones para la UI.
+ */
 export function useLeads() {
   const hasLoadedRef = useRef(false);
   const [leads, setLeads] = useState<Lead[]>([]);
