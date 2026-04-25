@@ -8,7 +8,6 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const router = useRouter();
   const { loading, isAuthenticated } = useAuth();
 
   // While loading auth state, show loading message
@@ -18,8 +17,7 @@ export default function DashboardLayout({
 
   // If not authenticated, redirect to login
   if (!isAuthenticated) {
-    router.replace('/login');
-    return null;
+    return <div style={{ padding: '20px' }}>Loading...</div>;
   }
 
   // If authenticated, render children

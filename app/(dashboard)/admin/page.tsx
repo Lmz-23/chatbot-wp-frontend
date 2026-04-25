@@ -82,11 +82,6 @@ export default function AdminPage() {
   );
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.replace('/login');
-      return;
-    }
-
     if (!authLoading && isAuthenticated && !isPlatformAdmin) {
       router.replace('/');
     }

@@ -107,9 +107,7 @@ export default function UsersPage() {
   );
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.replace('/login');
-    }
+    if (!authLoading && !isAuthenticated) return;
   }, [authLoading, isAuthenticated, router]);
 
   useEffect(() => {
