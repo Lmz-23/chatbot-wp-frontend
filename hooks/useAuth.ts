@@ -13,6 +13,13 @@ import { useAuthSession } from '@/lib/auth/AuthSessionContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
+function isValidUserProfile(response: unknown): response is User {
+  if (!response || typeof response !== 'object') return false;
+
+  const profile = response as Partial<User>;
+  return typeof profile.userId === 'string' && typeof profile.email === 'string';
+}
+
 /**
  * Intenta refrescar token usando credenciales existentes (cookie/sesion).
  * @returns {Promise<boolean>} true si obtuvo un nuevo token valido.
@@ -96,7 +103,7 @@ export function useAuth() {
         // Token exists, fetch user data from /auth/me
         const response = await apiClient('/auth/me');
 
-        if (response && response.ok) {
+        if (isValidUserProfile(response)) {
           setUser({
             userId: response.userId,
             email: response.email,
