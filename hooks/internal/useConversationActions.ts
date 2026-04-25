@@ -33,10 +33,10 @@ export function useConversationActions<T extends ConversationActionItem>({
 
     const transformedMessages = await loadMessagesForConversation(conversationId);
     const last = transformedMessages[transformedMessages.length - 1];
-    if (last?.text) {
+    if (last) {
       setPreviewByConversation((prev) => ({
         ...prev,
-        [conversationId]: last.text
+        [conversationId]: last.text ?? ''
       }));
     }
   };
