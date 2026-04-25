@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api/apiClient";
-import { markSessionActive, setToken } from "@/lib/auth/tokenStore";
+import { useAuthSession } from "@/lib/auth/AuthSessionContext";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { setToken, markSessionActive } = useAuthSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);

@@ -9,6 +9,7 @@ import {
   hasActiveSessionFlag,
   setToken,
 } from '@/lib/auth/tokenStore';
+import { useAuthSession } from '@/lib/auth/AuthSessionContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -52,6 +53,7 @@ function redirectToLogin() {
  * @returns {{ user: User | null, loading: boolean, isAuthenticated: boolean, logout: () => void }} Estado y acciones de autenticacion.
  */
 export function useAuth() {
+  const { token: sessionToken, sessionActive, clearSession, setToken: setSessionToken, markSessionActive } = useAuthSession();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const hasInitialized = useRef(false);
@@ -69,18 +71,22 @@ export function useAuth() {
 
     const initializeAuth = async () => {
       try {
-        const sessionActive = hasActiveSessionFlag();
-        let token = getToken();
+        const hasSession = sessionActive || hasActiveSessionFlag();
+        let token = sessionToken || getToken();
 
-        if (sessionActive && !token) {
+        if (hasSession && !token) {
           const refreshed = await refreshTokenIfPossible();
           if (refreshed) {
             token = getToken();
+            if (token) {
+              setSessionToken(token);
+              markSessionActive();
+            }
           }
         }
 
-        if (!sessionActive || !token) {
-          clearAuthSession();
+        if (!hasSession || !token) {
+          clearSession();
           setUser(null);
           redirectToLogin();
           setLoading(false);
@@ -100,14 +106,14 @@ export function useAuth() {
           });
         } else {
           // Invalid response, clear session
-          clearAuthSession();
+          clearSession();
           setUser(null);
           redirectToLogin();
         }
       } catch (error) {
         // Request failed (likely 401 or network error)
         // apiClient already handles 401 redirect; we clear session for safety.
-        clearAuthSession();
+        clearSession();
         setUser(null);
         redirectToLogin();
       } finally {
@@ -119,7 +125,7 @@ export function useAuth() {
   }, []);
 
   const logout = () => {
-    clearAuthSession();
+    clearSession();
     setUser(null);
     window.location.href = '/login';
   };
