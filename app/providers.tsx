@@ -1,10 +1,7 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
-import { AuthSessionProvider } from '@/lib/auth/AuthSessionContext';
+import { AuthProvider } from '@/lib/auth/AuthContext';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-
-  return <AuthSessionProvider key={pathname}>{children}</AuthSessionProvider>;
+  return <AuthProvider>{children}</AuthProvider>;
 }

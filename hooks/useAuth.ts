@@ -1,7 +1,7 @@
 'use client';
 
-import { useAuthSession } from '@/lib/auth/AuthSessionContext';
+import { useAuthContext } from '@/lib/auth/AuthContext';
 
 export function useAuth() {
-  return useAuthSession();
+  return useAuthContext();
 }

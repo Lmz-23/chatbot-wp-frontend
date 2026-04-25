@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiClient } from "@/lib/api/apiClient";
-import { useAuthSession } from "@/lib/auth/AuthSessionContext";
+import { useAuth } from '@/hooks';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setToken, markSessionActive } = useAuthSession();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -33,25 +32,9 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await apiClient("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response) {
-        throw new Error("No response from server");
-      }
-
-      if (!response.token) {
-        throw new Error("No token in response");
-      }
-
-      setToken(response.token);
-      markSessionActive();
-
-      const profile = await apiClient('/auth/me');
-      const isPlatformAdmin = profile?.platformRole === 'PLATFORM_ADMIN';
-      router.replace(isPlatformAdmin ? '/admin' : '/');
+      const profile = await login(email, password);
+      const isPlatformAdmin = profile.platformRole === 'PLATFORM_ADMIN';
+      router.push(isPlatformAdmin ? '/admin' : '/');
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Error al intentar login";

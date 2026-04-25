@@ -1,4 +1,4 @@
-import { clearAuthSession, getToken } from "@/lib/auth/tokenStore"
+import { clearAuthArtifacts, getAuthToken } from '@/lib/auth/AuthContext';
 
 const COMPILED_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
 
@@ -34,7 +34,7 @@ export async function apiClient(
   endpoint: string,
   options: RequestInit = {}
 ) {
-  const token = getToken()
+  const token = getAuthToken()
 
   const apiUrl = resolveApiUrl()
   const url = `${apiUrl}${endpoint}`
@@ -54,7 +54,7 @@ export async function apiClient(
 
   if (res.status === 401 && !isAuthEndpoint) {
     if (typeof window !== "undefined") {
-      clearAuthSession()
+      clearAuthArtifacts()
       window.location.href = "/login"
     }
     return
