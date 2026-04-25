@@ -30,6 +30,10 @@ function resolveApiUrl() {
   return COMPILED_API_URL
 }
 
+function needsNgrokBypass(apiUrl: string) {
+  return apiUrl.includes("ngrok-free.dev") || apiUrl.includes("ngrok.app")
+}
+
 export async function apiClient(
   endpoint: string,
   options: RequestInit = {}
@@ -38,6 +42,7 @@ export async function apiClient(
 
   const apiUrl = resolveApiUrl()
   const url = `${apiUrl}${endpoint}`
+  const includeNgrokBypass = needsNgrokBypass(apiUrl)
   console.log("API Request:", { url, method: options.method })
 
   // Centralized HTTP layer: auth header, JSON defaults and unified error mapping.
@@ -46,6 +51,7 @@ export async function apiClient(
     headers: {
       "Content-Type": "application/json",
       ...(token && { Authorization: `Bearer ${token}` }),
+      ...(includeNgrokBypass && { "ngrok-skip-browser-warning": "true" }),
       ...options.headers,
     },
   })

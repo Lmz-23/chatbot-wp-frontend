@@ -44,6 +44,10 @@ function resolveApiUrl() {
   return COMPILED_API_URL;
 }
 
+function needsNgrokBypass(apiUrl: string) {
+  return apiUrl.includes('ngrok-free.dev') || apiUrl.includes('ngrok.app');
+}
+
 function setSessionFlag(active: boolean) {
   if (typeof window === 'undefined') return;
 
@@ -68,13 +72,16 @@ function isValidUserProfile(response: unknown): response is User {
 }
 
 async function fetchJson(endpoint: string, options: RequestInit = {}, token?: string | null) {
-  const url = `${resolveApiUrl()}${endpoint}`;
+  const apiUrl = resolveApiUrl();
+  const url = `${apiUrl}${endpoint}`;
+  const includeNgrokBypass = needsNgrokBypass(apiUrl);
   const res = await fetch(url, {
     ...options,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(includeNgrokBypass ? { 'ngrok-skip-browser-warning': 'true' } : {}),
       ...options.headers,
     },
   });
