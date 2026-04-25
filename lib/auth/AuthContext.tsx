@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@/types/auth';
 
 const SESSION_FLAG_KEY = 'replai_session_active';
@@ -112,9 +112,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const tokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     authToken = token;
+    tokenRef.current = token;
   }, [token]);
 
   const clearAll = useCallback(() => {
@@ -132,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    let nextToken = token;
+    let nextToken = tokenRef.current;
 
     if (!nextToken) {
       nextToken = await tryRefreshToken();
@@ -155,11 +157,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSessionFlag(true);
     setUser(profileResult.data);
     setIsLoading(false);
-  }, [clearAll, token]);
+  }, [clearAll]);
 
   useEffect(() => {
     restoreSession();
-  }, [restoreSession]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const loginResult = await fetchJson('/auth/login', {
