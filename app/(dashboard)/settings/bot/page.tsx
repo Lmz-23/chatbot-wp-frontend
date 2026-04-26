@@ -441,7 +441,10 @@ function buildFlowState(rawData: unknown) {
     }
   });
 
-  return layoutGraph(nodeList, edgeList);
+  const laidOutState = layoutGraph(nodeList, edgeList);
+  console.log('[BotSettings] React Flow nodes after build:', laidOutState.nodes);
+  console.log('[BotSettings] React Flow edges after build:', laidOutState.edges);
+  return laidOutState;
 }
 
 function getEdgeCurvature(sourceY: number, targetY: number) {
@@ -678,6 +681,15 @@ export default function BotSettingsPage() {
     });
   }, []);
 
+  useEffect(() => {
+    if (nodes.length > 0 || edges.length > 0) {
+      console.log('[BotSettings] dagre layout effect running', {
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+      });
+    }
+  }, [edges.length, nodes.length]);
+
   const applyFlowState = useCallback(
     (rawData: unknown) => {
       const nextState = buildFlowState(rawData);
@@ -698,6 +710,7 @@ export default function BotSettingsPage() {
 
       try {
         const response = await apiClient(botSettingsEndpoint);
+        console.log('[BotSettings] GET /api/settings/bot response:', response);
         const nextState = applyFlowState(response);
 
         if (!isAdminScopedView) {
@@ -964,10 +977,10 @@ export default function BotSettingsPage() {
 
   const auroraLayers = useMemo(
     () => [
-      'aurora-layer aurora-one',
-      'aurora-layer aurora-two',
-      'aurora-layer aurora-three',
-      'aurora-layer aurora-four',
+      'aurora-band aurora-band-one',
+      'aurora-band aurora-band-two',
+      'aurora-band aurora-band-three',
+      'aurora-band aurora-band-four',
     ],
     []
   );
@@ -982,51 +995,51 @@ export default function BotSettingsPage() {
           background: #04080f;
         }
 
-        @keyframes auroraDriftOne {
+        @keyframes auroraBandOne {
           0% {
-            transform: translate3d(-10%, -8%, 0) scale(1);
+            transform: translate3d(-14%, -6%, 0) scale(1.02, 1);
           }
           50% {
-            transform: translate3d(8%, 10%, 0) scale(1.12);
+            transform: translate3d(12%, 5%, 0) scale(1.08, 1);
           }
           100% {
-            transform: translate3d(-10%, -8%, 0) scale(1);
+            transform: translate3d(-14%, -6%, 0) scale(1.02, 1);
           }
         }
 
-        @keyframes auroraDriftTwo {
+        @keyframes auroraBandTwo {
           0% {
-            transform: translate3d(6%, -2%, 0) scale(1);
+            transform: translate3d(10%, 2%, 0) scale(1, 1.04);
           }
           50% {
-            transform: translate3d(-10%, 8%, 0) scale(1.08);
+            transform: translate3d(-8%, -4%, 0) scale(1, 1.1);
           }
           100% {
-            transform: translate3d(6%, -2%, 0) scale(1);
+            transform: translate3d(10%, 2%, 0) scale(1, 1.04);
           }
         }
 
-        @keyframes auroraDriftThree {
+        @keyframes auroraBandThree {
           0% {
-            transform: translate3d(0%, 0%, 0) scale(1);
+            transform: translate3d(-6%, 4%, 0) scale(1.03, 1);
           }
           50% {
-            transform: translate3d(12%, -6%, 0) scale(1.14);
+            transform: translate3d(8%, -7%, 0) scale(1.1, 1);
           }
           100% {
-            transform: translate3d(0%, 0%, 0) scale(1);
+            transform: translate3d(-6%, 4%, 0) scale(1.03, 1);
           }
         }
 
-        @keyframes auroraDriftFour {
+        @keyframes auroraBandFour {
           0% {
-            transform: translate3d(0%, 6%, 0) scale(1);
+            transform: translate3d(8%, -3%, 0) scale(1, 1.06);
           }
           50% {
-            transform: translate3d(-8%, -12%, 0) scale(1.1);
+            transform: translate3d(-10%, 7%, 0) scale(1, 1.12);
           }
           100% {
-            transform: translate3d(0%, 6%, 0) scale(1);
+            transform: translate3d(8%, -3%, 0) scale(1, 1.06);
           }
         }
 
@@ -1062,46 +1075,52 @@ export default function BotSettingsPage() {
           }
         }
 
-        .aurora-layer {
+        .aurora-band {
           position: absolute;
-          inset: -20% -10%;
+          left: -25%;
           filter: blur(40px);
-          opacity: 0.16;
+          opacity: 0.9;
           pointer-events: none;
           transform-origin: center;
+          border-radius: 50%;
+          mix-blend-mode: screen;
         }
 
-        .aurora-one {
-          background: radial-gradient(circle at 20% 28%, rgba(0, 200, 100, 0.38), transparent 34%),
-            radial-gradient(circle at 45% 12%, rgba(60, 100, 255, 0.28), transparent 28%),
-            radial-gradient(circle at 70% 18%, rgba(150, 50, 200, 0.22), transparent 30%);
-          animation: auroraDriftOne 22s ease-in-out infinite;
+        .aurora-band-one {
+          top: 6%;
+          width: 180%;
+          height: 92px;
+          background: linear-gradient(90deg, rgba(0, 255, 136, 0.06), rgba(0, 255, 136, 0.18) 42%, rgba(0, 204, 255, 0.12) 72%, transparent 100%);
+          animation: auroraBandOne 20s ease-in-out infinite;
         }
 
-        .aurora-two {
-          background: radial-gradient(circle at 10% 62%, rgba(60, 100, 255, 0.24), transparent 30%),
-            radial-gradient(circle at 55% 30%, rgba(0, 200, 100, 0.34), transparent 35%),
-            radial-gradient(circle at 86% 48%, rgba(150, 50, 200, 0.2), transparent 28%);
-          animation: auroraDriftTwo 19s ease-in-out infinite;
+        .aurora-band-two {
+          top: 18%;
+          width: 170%;
+          height: 110px;
+          background: linear-gradient(90deg, transparent 0%, rgba(0, 204, 255, 0.08) 20%, rgba(0, 255, 136, 0.16) 52%, rgba(136, 68, 255, 0.08) 78%, transparent 100%);
+          animation: auroraBandTwo 28s ease-in-out infinite;
         }
 
-        .aurora-three {
-          background: radial-gradient(circle at 30% 78%, rgba(150, 50, 200, 0.26), transparent 29%),
-            radial-gradient(circle at 72% 66%, rgba(0, 200, 100, 0.22), transparent 33%),
-            radial-gradient(circle at 92% 18%, rgba(60, 100, 255, 0.25), transparent 24%);
-          animation: auroraDriftThree 24s ease-in-out infinite;
+        .aurora-band-three {
+          top: 31%;
+          width: 200%;
+          height: 118px;
+          background: linear-gradient(90deg, transparent 0%, rgba(136, 68, 255, 0.08) 14%, rgba(0, 255, 136, 0.1) 48%, rgba(0, 204, 255, 0.1) 70%, transparent 100%);
+          animation: auroraBandThree 35s ease-in-out infinite;
         }
 
-        .aurora-four {
-          background: radial-gradient(circle at 40% 48%, rgba(0, 200, 100, 0.18), transparent 28%),
-            radial-gradient(circle at 68% 44%, rgba(60, 100, 255, 0.22), transparent 30%),
-            radial-gradient(circle at 18% 18%, rgba(150, 50, 200, 0.18), transparent 24%);
-          animation: auroraDriftFour 15s ease-in-out infinite;
+        .aurora-band-four {
+          top: 44%;
+          width: 160%;
+          height: 84px;
+          background: linear-gradient(90deg, transparent 0%, rgba(0, 255, 136, 0.08) 18%, rgba(136, 68, 255, 0.07) 52%, rgba(0, 204, 255, 0.08) 76%, transparent 100%);
+          animation: auroraBandFour 22s ease-in-out infinite;
         }
       `}</style>
 
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.03),transparent_34%),radial-gradient(circle_at_bottom,rgba(0,200,100,0.05),transparent_44%),linear-gradient(180deg,rgba(4,8,15,0.92),rgba(4,8,15,1))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.03),transparent_34%),linear-gradient(180deg,rgba(4,8,15,0.92),rgba(4,8,15,1))]" />
         {auroraLayers.map((className) => (
           <div key={className} className={className} />
         ))}
@@ -1136,7 +1155,7 @@ export default function BotSettingsPage() {
       </header>
 
       <main className="relative z-10 pt-[72px]">
-        <div className="absolute inset-0 right-0 md:right-[280px]">
+        <div className="absolute inset-y-0 left-0 right-0 md:right-[280px]">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,200,100,0.05),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(55,100,255,0.06),transparent_30%)]" />
           <ReactFlow
             nodes={nodes}
@@ -1150,7 +1169,8 @@ export default function BotSettingsPage() {
             onPaneClick={handlePaneClick}
             fitView
             onInit={handleFlowInit}
-            className="h-[calc(100vh-72px)] w-full"
+            className="h-full w-full"
+            style={{ width: '100%', height: '100%' }}
             nodesDraggable
             nodesConnectable
             elementsSelectable
@@ -1170,7 +1190,7 @@ export default function BotSettingsPage() {
           </ReactFlow>
         </div>
 
-        <aside className="fixed right-0 top-[72px] z-30 flex h-[calc(100vh-72px)] w-full flex-col border-l border-[#378ADD]/18 bg-[rgba(4,8,15,0.92)] px-4 py-4 backdrop-blur-md md:w-[280px]">
+        <aside className="fixed right-0 top-[72px] z-30 flex h-[calc(100vh-72px)] w-full flex-col overflow-y-auto border-l border-[#378ADD]/18 bg-[rgba(4,8,15,0.92)] px-4 py-4 backdrop-blur-md md:w-[280px]">
           {panelMessage ? (
             <div className="mb-3 rounded-[12px] border border-[#F4C266]/18 bg-[rgba(139,105,20,0.12)] px-3 py-2 text-[12px] leading-5 text-[#F8E1A0]">
               {panelMessage}
