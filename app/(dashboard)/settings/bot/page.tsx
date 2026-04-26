@@ -261,21 +261,26 @@ function sanitizeBotNodes(rawData: unknown): BotNode[] {
       const id = typeof candidate.id === 'string' ? normalizeText(candidate.id) : '';
       if (!id) return null;
 
-      const transitions = Array.isArray(candidate.transitions)
-        ? candidate.transitions
-            .map((transition) => {
-              const next = typeof transition?.next === 'string' ? normalizeText(transition.next) : '';
-              if (!next) return null;
+      const transitionMap = new Map<string, BotTransition>();
+      if (Array.isArray(candidate.transitions)) {
+        candidate.transitions.forEach((transition) => {
+          const next = typeof transition?.next === 'string' ? normalizeText(transition.next) : '';
+          if (!next) return;
 
-              return {
-                keywords: Array.isArray(transition?.keywords)
-                  ? transition.keywords.map((keyword) => normalizeText(String(keyword))).filter(Boolean)
-                  : [],
-                next,
-              };
-            })
-            .filter(Boolean)
-        : [];
+          const keywords = Array.isArray(transition?.keywords)
+            ? transition.keywords.map((keyword) => normalizeText(String(keyword))).filter(Boolean)
+            : [];
+          const transitionKey = `${next}::${keywords.join('|')}`;
+          if (!transitionMap.has(transitionKey)) {
+            transitionMap.set(transitionKey, {
+              keywords,
+              next,
+            });
+          }
+        });
+      }
+
+      const transitions = Array.from(transitionMap.values());
 
       const defaultTarget = typeof candidate.default === 'string' && normalizeText(candidate.default)
         ? normalizeText(candidate.default)
@@ -295,30 +300,7 @@ function sanitizeBotNodes(rawData: unknown): BotNode[] {
     return [...starterGraph];
   }
 
-  const knownIds = new Set(nodes.map((node) => node.id));
-  const referencedIds = new Set<string>();
-
-  nodes.forEach((node) => {
-    if (node.default) {
-      referencedIds.add(node.default);
-    }
-
-    node.transitions.forEach((transition) => {
-      referencedIds.add(transition.next);
-    });
-  });
-
-  const placeholders = [...referencedIds]
-    .filter((referenceId) => !knownIds.has(referenceId))
-    .map((referenceId) => ({
-      id: referenceId,
-      message: 'Nodo enlazado pendiente',
-      transitions: [],
-      default: 'start',
-      kind: normalizeNodeKind(undefined, referenceId),
-    } satisfies BotNode));
-
-  return [...nodes, ...placeholders];
+  return nodes;
 }
 
 function buildBotNodes(flowNodes: Node<FlowNodeData>[], flowEdges: Edge<FlowEdgeData>[]) {
@@ -409,12 +391,19 @@ function buildFlowState(rawData: unknown) {
   }));
 
   const edgeList: Edge<FlowEdgeData>[] = [];
+  const edgeKeySet = new Set<string>();
 
   botNodes.forEach((node) => {
     node.transitions.forEach((transition, index) => {
       if (!nodeIds.has(transition.next)) {
         return;
       }
+
+      const branchKey = `branch|${node.id}|${transition.next}|${transition.keywords.join('|')}`;
+      if (edgeKeySet.has(branchKey)) {
+        return;
+      }
+      edgeKeySet.add(branchKey);
 
       edgeList.push({
         id: `branch-${node.id}-${transition.next}-${index}`,
@@ -429,6 +418,12 @@ function buildFlowState(rawData: unknown) {
     });
 
     if (node.default && nodeIds.has(node.default)) {
+      const defaultKey = `default|${node.id}|${node.default}`;
+      if (edgeKeySet.has(defaultKey)) {
+        return;
+      }
+      edgeKeySet.add(defaultKey);
+
       edgeList.push({
         id: `default-${node.id}`,
         source: node.id,
@@ -442,6 +437,7 @@ function buildFlowState(rawData: unknown) {
   });
 
   const laidOutState = layoutGraph(nodeList, edgeList);
+  console.log('[BotSettings] nodes after dagre:', laidOutState.nodes.map((n) => ({ id: n.id, x: n.position?.x, y: n.position?.y })));
   console.log('[BotSettings] React Flow nodes after build:', laidOutState.nodes);
   console.log('[BotSettings] React Flow edges after build:', laidOutState.edges);
   return laidOutState;
@@ -1128,7 +1124,7 @@ export default function BotSettingsPage() {
       </div>
 
       <header className="fixed inset-x-0 top-0 z-40 border-b border-[#378ADD]/20 bg-[rgba(4,8,15,0.95)] backdrop-blur-md">
-        <div className="flex h-[72px] items-center justify-between px-5 sm:px-8">
+        <div className="flex h-[56px] items-center justify-between px-5 sm:px-8">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-[#378ADD]/30 bg-[rgba(55,138,221,0.12)]">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -1154,8 +1150,8 @@ export default function BotSettingsPage() {
         </div>
       </header>
 
-      <main className="relative z-10 pt-[72px]">
-        <div className="absolute inset-y-0 left-0 right-0 md:right-[280px]">
+      <main className="relative z-10 mt-[56px] h-[calc(100vh-56px)]">
+        <div className="absolute inset-0 left-0 right-0 md:right-[280px]">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,200,100,0.05),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(55,100,255,0.06),transparent_30%)]" />
           <ReactFlow
             nodes={nodes}
@@ -1170,7 +1166,7 @@ export default function BotSettingsPage() {
             fitView
             onInit={handleFlowInit}
             className="h-full w-full"
-            style={{ width: '100%', height: '100%' }}
+            style={{ width: '100%', height: '100%', position: 'absolute' }}
             nodesDraggable
             nodesConnectable
             elementsSelectable
@@ -1190,7 +1186,7 @@ export default function BotSettingsPage() {
           </ReactFlow>
         </div>
 
-        <aside className="fixed right-0 top-[72px] z-30 flex h-[calc(100vh-72px)] w-full flex-col overflow-y-auto border-l border-[#378ADD]/18 bg-[rgba(4,8,15,0.92)] px-4 py-4 backdrop-blur-md md:w-[280px]">
+        <aside className="fixed right-0 top-[56px] z-30 flex h-[calc(100vh-56px)] w-full flex-col overflow-y-auto border-l border-[#378ADD]/18 bg-[rgba(4,8,15,0.92)] px-4 py-4 backdrop-blur-md md:w-[280px]">
           {panelMessage ? (
             <div className="mb-3 rounded-[12px] border border-[#F4C266]/18 bg-[rgba(139,105,20,0.12)] px-3 py-2 text-[12px] leading-5 text-[#F8E1A0]">
               {panelMessage}
@@ -1388,7 +1384,7 @@ export default function BotSettingsPage() {
         </button>
 
         {loading ? (
-          <div className="pointer-events-none fixed inset-x-0 top-[72px] z-20 flex justify-center px-4 pt-4">
+          <div className="pointer-events-none fixed inset-x-0 top-[56px] z-20 flex justify-center px-4 pt-4">
             <div className="rounded-full border border-[#378ADD]/18 bg-[rgba(4,8,15,0.82)] px-4 py-2 text-[12px] text-[#D7E9FF]">
               Cargando árbol rúnico...
             </div>
