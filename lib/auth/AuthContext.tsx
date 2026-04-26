@@ -70,7 +70,7 @@ function getStoredAccessToken() {
   return sessionStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
-function setStoredAccessToken(token) {
+function setStoredAccessToken(token: string | null) {
   if (typeof window === 'undefined') return;
 
   if (token) {
