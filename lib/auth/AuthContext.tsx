@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { User } from '@/types/auth';
 
 const SESSION_FLAG_KEY = 'replai_session_active';
+const ACCESS_TOKEN_KEY = 'replai_access_token';
 const COMPILED_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 let authToken: string | null = null;
@@ -64,6 +65,22 @@ function hasSessionFlag() {
   return sessionStorage.getItem(SESSION_FLAG_KEY) === '1';
 }
 
+function getStoredAccessToken() {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+function setStoredAccessToken(token) {
+  if (typeof window === 'undefined') return;
+
+  if (token) {
+    sessionStorage.setItem(ACCESS_TOKEN_KEY, token);
+    return;
+  }
+
+  sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+}
+
 function isValidUserProfile(response: unknown): response is User {
   if (!response || typeof response !== 'object') return false;
 
@@ -113,17 +130,19 @@ export function getAuthToken() {
 export function clearAuthArtifacts() {
   authToken = null;
   setSessionFlag(false);
+  setStoredAccessToken(null);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(() => getStoredAccessToken());
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const tokenRef = useRef<string | null>(null);
+  const tokenRef = useRef<string | null>(token);
 
   useEffect(() => {
     authToken = token;
     tokenRef.current = token;
+    setStoredAccessToken(token);
   }, [token]);
 
   const clearAll = useCallback(() => {
