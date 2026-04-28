@@ -912,6 +912,30 @@ export default function BotSettingsPage() {
     }
   }, [botSettingsEndpoint, edges, nodes]);
 
+  // Auto-save on node/edge changes (debounced)
+  useEffect(() => {
+    if (loading || nodes.length === 0) return;
+
+    const autoSaveTimer = setTimeout(async () => {
+      try {
+        const payload = {
+          nodes: buildBotNodes(nodes, edges),
+        };
+
+        await apiClient(botSettingsEndpoint, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        });
+
+        console.log('[BotSettings] Auto-saved successfully');
+      } catch (err) {
+        console.error('[BotSettings] Auto-save failed:', err);
+      }
+    }, 2000); // Debounce: save after 2 seconds of inactivity
+
+    return () => clearTimeout(autoSaveTimer);
+  }, [botSettingsEndpoint, edges, nodes, loading]);
+
   const handleConnect = useCallback(
     (connection: Connection) => {
       if (!connection.source || !connection.target) return;
