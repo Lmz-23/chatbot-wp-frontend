@@ -298,6 +298,7 @@ export function useLeads() {
         return {
           id: lead.id,
           nameOrPhone: lead.name || lead.phone,
+          name: lead.name,
           phone: lead.phone,
           status: lead.status,
           statusClassName: getStatusClasses(lead.status),
@@ -313,7 +314,9 @@ export function useLeads() {
           isSaving: !!savingByLead[lead.id],
           isHighlighted: highlightedLeadId === lead.id,
           nameDraft: nameDraftByLead[lead.id] ?? '',
-          canSaveName: (nameDraftByLead[lead.id] ?? '') !== (lead.name ?? '')
+          canSaveName: (nameDraftByLead[lead.id] ?? '') !== (lead.name ?? ''),
+          conversationStatus: (lead as any).conversation_status,
+          notes: (lead as any).notes
         };
       })
     }));
