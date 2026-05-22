@@ -18,6 +18,7 @@ type FaqItem = {
 };
 
 type SettingsContext = {
+  assistant_name: string;
   business_description: string;
   services: ServiceItem[];
   schedule: string;
@@ -43,6 +44,7 @@ const EMPTY_FAQ: FaqItem = {
 };
 
 const EMPTY_CONTEXT: SettingsContext = {
+  assistant_name: '',
   business_description: '',
   services: [],
   schedule: '',
@@ -84,6 +86,7 @@ function normalizeContext(value: unknown): SettingsContext {
   const context = value as Partial<SettingsContext>;
 
   return {
+    assistant_name: typeof context.assistant_name === 'string' ? context.assistant_name : '',
     business_description: typeof context.business_description === 'string' ? context.business_description : '',
     services: Array.isArray(context.services) ? context.services.map(normalizeService) : [],
     schedule: typeof context.schedule === 'string' ? context.schedule : '',
@@ -222,6 +225,7 @@ export default function BotSettingsPage() {
     setError(null);
 
     const payload = {
+      assistant_name: context.assistant_name,
       business_description: context.business_description,
       services: cleanServiceList(context.services),
       schedule: context.schedule,
@@ -287,6 +291,16 @@ export default function BotSettingsPage() {
                 {error}
               </div>
             ) : null}
+
+            <section className="rounded-[12px] border-[0.5px] border-[#D5DFEA] bg-white p-4">
+              <h2 className="text-[13px] font-medium text-slate-600">Nombre del asistente</h2>
+              <input
+                value={context.assistant_name}
+                onChange={(event) => setContext((current) => ({ ...current, assistant_name: event.target.value }))}
+                placeholder="Ej: Sofía, Andrés, Asistente..."
+                className="mt-3 w-full rounded-[8px] border-[0.5px] border-[#D5DFEA] bg-white px-3 py-2 text-[14px] font-normal text-slate-900 outline-none placeholder:text-slate-400"
+              />
+            </section>
 
             <section className="rounded-[12px] border-[0.5px] border-[#D5DFEA] bg-white p-4">
               <h2 className="text-[13px] font-medium text-slate-600">Sobre el negocio</h2>

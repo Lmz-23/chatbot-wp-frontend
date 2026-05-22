@@ -61,34 +61,50 @@ function getConversationStatusBadge(status: string | null | undefined) {
   }
 }
 
-function parseNotes(notes: string | null | undefined): Record<string, any> {
-  if (!notes) return {};
-  
-  if (typeof notes === 'string') {
-    try {
-      const parsed = JSON.parse(notes);
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-    } catch {
-      return {};
-    }
+function parseNotes(notes: string | null | undefined): {
+  isJson: boolean;
+  entries: Array<{ key: string; label: string; value: string }>;
+  plainText: string;
+} {
+  if (!notes) {
+    return { isJson: false, entries: [], plainText: '' };
   }
-  
-  return {};
+
+  const fieldLabels: Record<string, string> = {
+    client_name: 'Nombre',
+    business_name: 'Negocio',
+    contact: 'Contacto',
+    interest: 'Interés'
+  };
+
+  try {
+    const parsed = JSON.parse(notes);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { isJson: false, entries: [], plainText: String(notes).trim() };
+    }
+
+    const entries = Object.entries(parsed)
+      .map(([key, value]) => ({
+        key,
+        label: fieldLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+        value: String(value ?? '').trim()
+      }))
+      .filter((item) => item.value);
+
+    return {
+      isJson: true,
+      entries,
+      plainText: entries.length ? '' : String(notes).trim()
+    };
+  } catch {
+    return { isJson: false, entries: [], plainText: String(notes).trim() };
+  }
 }
-
-const FIELD_LABELS: Record<string, string> = {
-  client_name: 'Nombre',
-  business_name: 'Negocio',
-  contact: 'Contacto',
-  interest: 'Interés'
-};
-
-const FIELD_ORDER = ['client_name', 'business_name', 'contact', 'interest'];
 
 export function LeadItem({ item, onAdvanceStatus, onNameChange, onSaveName }: LeadItemProps) {
   const [showNotes, setShowNotes] = useState(false);
   const parsedNotes = parseNotes(item.notes);
-  const hasNotes = Object.keys(parsedNotes).length > 0;
+  const hasNotes = parsedNotes.entries.length > 0 || !!parsedNotes.plainText;
   const conversationBadge = getConversationStatusBadge(item.conversationStatus);
 
   return (
@@ -282,20 +298,17 @@ export function LeadItem({ item, onAdvanceStatus, onNameChange, onSaveName }: Le
 
           {showNotes && (
             <div className="mt-2 space-y-1">
-              {FIELD_ORDER.map((fieldKey) => {
-                const value = parsedNotes[fieldKey];
-                if (value === null || value === undefined || value === '') {
-                  return null;
-                }
-                
-                const label = FIELD_LABELS[fieldKey] || fieldKey;
-                
-                return (
-                  <p key={fieldKey} className="text-[12px] text-[#3D444F]">
-                    <span className="font-medium">{label}:</span> {String(value)}
-                  </p>
-                );
-              })}
+              {parsedNotes.entries.map((entry) => (
+                <p key={entry.key} className="text-[12px] text-[#3D444F]">
+                  <span className="font-medium">{entry.label}:</span> {entry.value}
+                </p>
+              ))}
+              {!parsedNotes.isJson && parsedNotes.plainText ? (
+                <p className="text-[12px] text-[#3D444F]">{parsedNotes.plainText}</p>
+              ) : null}
+              {parsedNotes.isJson && parsedNotes.entries.length === 0 && parsedNotes.plainText ? (
+                <p className="text-[12px] text-[#3D444F]">{parsedNotes.plainText}</p>
+              ) : null}
             </div>
           )}
         </div>
