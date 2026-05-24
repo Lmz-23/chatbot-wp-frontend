@@ -34,7 +34,7 @@ export default function LoginPage() {
     try {
       const profile = await login(email, password);
       const isPlatformAdmin = profile.platformRole === 'PLATFORM_ADMIN';
-      router.push(isPlatformAdmin ? '/admin' : '/');
+      router.push(isPlatformAdmin ? '/admin' : '/conversations');
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Error al intentar login";

@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useLeads } from '@/hooks';
 import type { LeadStatus } from '@/lib/utils/leads';
@@ -72,31 +71,8 @@ export default function LeadsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#F6F7F9]" style={{ fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-      <header className="fixed inset-x-0 top-0 z-10 bg-white" style={{ borderBottom: '0.5px solid #E3E6EB' }}>
-        <div className="mx-auto flex h-[68px] w-full max-w-[1200px] items-center justify-between px-4 md:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-[28px] w-[28px] items-center justify-center rounded-[8px] bg-[#185FA5]">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                <rect x="4" y="5" width="16" height="12" rx="2" stroke="white" strokeWidth="1.8" />
-                <path d="M8 9H16" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-                <path d="M8 13H13" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            </div>
-            <span className="text-[16px] leading-none text-[#1B1D21] font-medium">Replai</span>
-          </div>
-
-          <Link
-            href="/"
-            className="inline-flex h-8 items-center rounded-[8px] border px-3 text-[12px] font-medium"
-            style={{ borderColor: '#B5D4F4', borderWidth: '0.5px', backgroundColor: '#E6F1FB', color: '#185FA5' }}
-          >
-            ← Inicio
-          </Link>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-[1200px] px-4 pb-8 pt-[96px] md:px-8">
+    <main className="min-h-[calc(100dvh-4rem)] bg-[#F6F7F9]" style={{ fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+      <div className="mx-auto max-w-[1200px] px-4 pb-8 pt-6 md:px-8">
         <header className="mb-6">
           <h1 className="text-[32px] leading-[1.2] text-[#1B1D21] font-medium">Leads</h1>
           <p className="mt-1 text-[28px] leading-[1.2] text-[#6F7782] font-normal">Prospectos capturados desde conversaciones de WhatsApp</p>

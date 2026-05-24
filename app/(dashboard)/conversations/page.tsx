@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { ChatHeader } from '@/components/conversations/ChatHeader';
 import { ConversationList } from '@/components/conversations/ConversationList';
@@ -82,22 +81,19 @@ export default function ConversationsPage() {
   const showChatPane = !isMobileViewport || isMobileViewingChat;
 
   return (
-    <div className="flex h-[100dvh] gap-0 md:flex-row">
+    <div className="flex min-h-[calc(100dvh-4rem)] gap-0 md:flex-row">
       <div
         className={`${showListPane ? 'flex' : 'hidden'} w-full flex-col border-r border-border bg-muted/30 md:flex md:w-1/3`}
       >
         <div className="border-b border-border bg-card p-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-xl font-semibold">Conversations</h2>
+            <div>
+              <h2 className="text-xl font-semibold">Conversaciones</h2>
+              <p className="text-[12px] text-muted-foreground">Chats activos y seguimiento en tiempo real</p>
+            </div>
             <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
               {attentionCount} por responder
             </span>
-            <Link
-              href="/"
-              className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground hover:bg-muted"
-            >
-              Inicio
-            </Link>
           </div>
         </div>
 

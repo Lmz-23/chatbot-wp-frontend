@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/api/apiClient';
@@ -252,24 +251,8 @@ export default function BotSettingsPage() {
   }, [context, endpoint, showToast]);
 
   return (
-    <main className="min-h-screen bg-[var(--background-tertiary)] text-slate-900">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8">
-        <header className="mb-6 flex items-center justify-between border-b-[0.5px] border-[#D5DFEA] pb-4">
-          <Link href="/" className="flex items-center gap-3 text-slate-900">
-            <span className="flex h-10 w-10 items-center justify-center rounded-[8px] border-[0.5px] border-[#D5DFEA] bg-white text-[15px] font-medium text-[#185FA5]">
-              R
-            </span>
-            <span className="text-[15px] font-medium tracking-[0.02em]">Replai</span>
-          </Link>
-
-          <Link
-            href="/"
-            className="inline-flex items-center rounded-[8px] border-[0.5px] border-[#D5DFEA] bg-white px-4 py-2 text-[14px] font-medium text-slate-700 transition-none"
-          >
-            ← Inicio
-          </Link>
-        </header>
-
+    <main className="min-h-[calc(100dvh-4rem)] bg-[var(--background-tertiary)] text-slate-900">
+      <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8">
         <section className="mb-6">
           <h1 className="text-[28px] font-medium leading-tight text-slate-900">Configuración del bot</h1>
           <p className="mt-1 text-[14px] font-normal text-slate-600">Define el contexto que usará tu asistente virtual</p>
