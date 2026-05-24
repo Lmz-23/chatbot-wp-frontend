@@ -182,7 +182,9 @@ export function useConversationPresentation<T extends ConversationPresentationIt
   const selectedHeaderData: SelectedHeaderData | null = selectedConversationId
     ? {
         title: getDisplayName(selectedConversation?.lead_name) || selectedConversation?.user_phone || '',
-        subtitle: getDisplayName(selectedConversation?.lead_name) ? selectedConversation?.user_phone : null,
+        subtitle: getDisplayName(selectedConversation?.lead_name)
+          ? (selectedConversation?.user_phone || null)
+          : null,
         attentionBadge: selectedAttentionBadge,
         statusLabel: getStatusLabel((selectedConversation?.status || 'bot') as ConversationStatus),
         statusClassName: getStatusClasses((selectedConversation?.status || 'bot') as ConversationStatus),
