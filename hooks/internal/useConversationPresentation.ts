@@ -90,6 +90,11 @@ export function useConversationPresentation<T extends ConversationPresentationIt
   getLeadStatusLabel,
   getNextLeadAction
 }: UseConversationPresentationParams<T>) {
+  const getDisplayName = (value?: string | null) => {
+    const trimmed = String(value || '').trim();
+    return trimmed.length > 0 ? trimmed : '';
+  };
+
   const selectedAttentionLevel = getAttentionLevelFromLastMessage({
     senderType: selectedConversation?.last_message_sender_type,
     status: selectedConversation?.last_message_status,
@@ -122,8 +127,8 @@ export function useConversationPresentation<T extends ConversationPresentationIt
 
       return {
         id: conv.id,
-        name: conv.lead_name || conv.user_phone,
-        phone: conv.lead_name ? conv.user_phone : null,
+        name: getDisplayName(conv.lead_name) || conv.user_phone,
+        phone: getDisplayName(conv.lead_name) ? conv.user_phone : null,
         lastMessage:
           messagesByConversation[conv.id]?.[messagesByConversation[conv.id].length - 1]?.text
           || previewByConversation[conv.id]
@@ -176,8 +181,8 @@ export function useConversationPresentation<T extends ConversationPresentationIt
 
   const selectedHeaderData: SelectedHeaderData | null = selectedConversationId
     ? {
-        title: selectedConversation?.lead_name || selectedConversation?.user_phone || '',
-        subtitle: selectedConversation?.lead_name ? selectedConversation?.user_phone : null,
+        title: getDisplayName(selectedConversation?.lead_name) || selectedConversation?.user_phone || '',
+        subtitle: getDisplayName(selectedConversation?.lead_name) ? selectedConversation?.user_phone : null,
         attentionBadge: selectedAttentionBadge,
         statusLabel: getStatusLabel((selectedConversation?.status || 'bot') as ConversationStatus),
         statusClassName: getStatusClasses((selectedConversation?.status || 'bot') as ConversationStatus),

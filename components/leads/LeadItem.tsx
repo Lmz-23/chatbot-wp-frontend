@@ -83,7 +83,9 @@ function parseNotes(notes: string | null | undefined): {
       return { isJson: false, entries: [], plainText: String(notes).trim() };
     }
 
+    const allowedKeys = new Set(['client_name', 'business_name', 'contact', 'interest']);
     const entries = Object.entries(parsed)
+      .filter(([key]) => allowedKeys.has(key))
       .map(([key, value]) => ({
         key,
         label: fieldLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
@@ -94,7 +96,7 @@ function parseNotes(notes: string | null | undefined): {
     return {
       isJson: true,
       entries,
-      plainText: entries.length ? '' : String(notes).trim()
+      plainText: ''
     };
   } catch {
     return { isJson: false, entries: [], plainText: String(notes).trim() };
@@ -106,6 +108,7 @@ export function LeadItem({ item, onAdvanceStatus, onNameChange, onSaveName }: Le
   const parsedNotes = parseNotes(item.notes);
   const hasNotes = parsedNotes.entries.length > 0 || !!parsedNotes.plainText;
   const conversationBadge = getConversationStatusBadge(item.conversationStatus);
+  const displayName = String(item.name || '').trim() || item.phone;
 
   return (
     <article
@@ -117,11 +120,11 @@ export function LeadItem({ item, onAdvanceStatus, onNameChange, onSaveName }: Le
         <div className="min-w-0 flex-1">
           {/* Lead Name (Prominent) */}
           <p className="text-[16px] leading-none font-medium text-[#1B1D21]">
-            {item.name || item.phone}
+            {displayName}
           </p>
           
           {/* Phone (Secondary) */}
-          {item.name && (
+          {String(item.name || '').trim() && (
             <p className="mt-1 text-[14px] leading-none text-[#6F7782]">
               {item.phone}
             </p>

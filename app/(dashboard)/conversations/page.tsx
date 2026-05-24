@@ -28,7 +28,7 @@ export default function ConversationsPage() {
   const [draftMessage, setDraftMessage] = useState('');
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [isMobileViewingChat, setIsMobileViewingChat] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -49,7 +49,10 @@ export default function ConversationsPage() {
   }, [isMobileViewport]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    container.scrollTop = container.scrollHeight;
   }, [selectedConversationId, selectedMessages]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -81,9 +84,9 @@ export default function ConversationsPage() {
   const showChatPane = !isMobileViewport || isMobileViewingChat;
 
   return (
-    <div className="flex min-h-[calc(100dvh-4rem)] gap-0 md:flex-row">
+    <div className="flex h-[calc(100dvh-4rem)] min-h-0 gap-0 overflow-hidden md:flex-row">
       <div
-        className={`${showListPane ? 'flex' : 'hidden'} w-full flex-col border-r border-border bg-muted/30 md:flex md:w-1/3`}
+        className={`${showListPane ? 'flex' : 'hidden'} min-h-0 w-full flex-col border-r border-border bg-muted/30 md:flex md:w-1/3`}
       >
         <div className="border-b border-border bg-card p-4">
           <div className="flex items-center justify-between gap-2">
@@ -113,7 +116,7 @@ export default function ConversationsPage() {
         />
       </div>
 
-      <div className={`${showChatPane ? 'flex' : 'hidden'} flex-1 flex-col bg-background md:flex`}>
+      <div className={`${showChatPane ? 'flex' : 'hidden'} min-h-0 flex-1 flex-col bg-background md:flex`}>
         {!selectedConversationId || !selectedHeaderData ? (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             Selecciona una conversación
@@ -145,7 +148,7 @@ export default function ConversationsPage() {
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
               {loadingMessages ? (
                 <div className="text-sm text-muted-foreground">Cargando mensajes...</div>
               ) : selectedMessages.length === 0 ? (
@@ -181,12 +184,11 @@ export default function ConversationsPage() {
                   </div>
                 ))
               )}
-              <div ref={messagesEndRef} />
             </div>
 
             <form
               onSubmit={handleSendMessage}
-              className="sticky bottom-0 border-t border-border bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:static md:pb-4"
+              className="shrink-0 border-t border-border bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-4"
             >
               <div className="flex gap-2">
                 <input
