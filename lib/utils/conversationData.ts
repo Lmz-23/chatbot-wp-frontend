@@ -11,20 +11,28 @@ export interface LeadSourceItem {
   phone?: string;
   name?: string | null;
   status?: LeadStatus | null;
-  notes?: string | null;
+  notes?: unknown;
 }
 
-function extractDisplayNameFromNotes(notes?: string | null): string {
+function extractDisplayNameFromNotes(notes?: unknown): string {
   if (!notes) return '';
+
+  const toPreferredName = (value: Record<string, unknown>) => {
+    const businessName = String(value.business_name ?? value.businessName ?? value.negocio ?? value.company_name ?? '').trim();
+    const clientName = String(value.client_name ?? value.clientName ?? value.nombre_cliente ?? value.contact_name ?? '').trim();
+    return businessName || clientName || '';
+  };
+
+  if (typeof notes === 'object' && notes !== null && !Array.isArray(notes)) {
+    return toPreferredName(notes as Record<string, unknown>);
+  }
+
+  if (typeof notes !== 'string') return '';
 
   try {
     const parsed = JSON.parse(notes);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '';
-
-    const businessName = String((parsed as Record<string, unknown>).business_name ?? '').trim();
-    const clientName = String((parsed as Record<string, unknown>).client_name ?? '').trim();
-
-    return businessName || clientName || '';
+    return toPreferredName(parsed as Record<string, unknown>);
   } catch {
     return '';
   }

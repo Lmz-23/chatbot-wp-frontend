@@ -4,8 +4,97 @@ import { useMemo, useState } from 'react';
 import { useLeads } from '@/hooks';
 import type { LeadStatus } from '@/lib/utils/leads';
 
+interface CapturedInfoEntry {
+  key: string;
+  label: string;
+  value: string;
+}
+
+function extractCapturedInfoEntries(notes: unknown): CapturedInfoEntry[] {
+  if (!notes) return [];
+
+  const fieldLabels: Record<string, string> = {
+    client_name: 'Nombre',
+    clientName: 'Nombre',
+    nombre_cliente: 'Nombre',
+    business_name: 'Negocio',
+    businessName: 'Negocio',
+    negocio: 'Negocio',
+    contact: 'Contacto',
+    contact_name: 'Contacto',
+    interest: 'Interes',
+    interes: 'Interes'
+  };
+
+  const parseSource = (): Record<string, unknown> | null => {
+    if (typeof notes === 'object' && notes !== null && !Array.isArray(notes)) {
+      return notes as Record<string, unknown>;
+    }
+
+    if (typeof notes !== 'string') return null;
+
+    try {
+      const parsed = JSON.parse(notes);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  };
+
+  const parsed = parseSource();
+  if (!parsed) return [];
+
+  const preferredOrder = [
+    'client_name',
+    'clientName',
+    'nombre_cliente',
+    'business_name',
+    'businessName',
+    'negocio',
+    'contact',
+    'contact_name',
+    'interest',
+    'interes'
+  ];
+
+  const consumedCanonicalKeys = new Set<string>();
+  const canonicalByKey: Record<string, string> = {
+    client_name: 'client_name',
+    clientName: 'client_name',
+    nombre_cliente: 'client_name',
+    business_name: 'business_name',
+    businessName: 'business_name',
+    negocio: 'business_name',
+    contact: 'contact',
+    contact_name: 'contact',
+    interest: 'interest',
+    interes: 'interest'
+  };
+
+  const entries: CapturedInfoEntry[] = [];
+  for (const key of preferredOrder) {
+    const canonical = canonicalByKey[key];
+    if (!canonical || consumedCanonicalKeys.has(canonical)) continue;
+
+    const raw = parsed[key];
+    const value = String(raw ?? '').trim();
+    if (!value) continue;
+
+    entries.push({
+      key: canonical,
+      label: fieldLabels[key] || key,
+      value
+    });
+    consumedCanonicalKeys.add(canonical);
+  }
+
+  return entries;
+}
+
 export default function LeadsPage() {
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
+  const [expandedNotesByLeadId, setExpandedNotesByLeadId] = useState<Record<string, boolean>>({});
 
   const {
     loading,
@@ -36,6 +125,13 @@ export default function LeadsPage() {
   }
 
   const closeEditor = () => setEditingLeadId(null);
+  const toggleLeadNotes = (leadId: string) => {
+    setExpandedNotesByLeadId((prev) => ({
+      ...prev,
+      [leadId]: !prev[leadId]
+    }));
+  };
+
   const saveEditingLeadName = async () => {
     if (!editingLeadId) return;
     await saveLeadName(editingLeadId);
@@ -181,6 +277,9 @@ export default function LeadsPage() {
                   ) : (
                     section.items.map((item) => {
                       const action = getActionButton(item.status);
+                      const capturedInfoEntries = extractCapturedInfoEntries(item.notes);
+                      const hasCapturedInfo = capturedInfoEntries.length > 0;
+                      const notesOpen = !!expandedNotesByLeadId[item.id];
 
                       return (
                         <article
@@ -261,6 +360,29 @@ export default function LeadsPage() {
                               </button>
                             </div>
                           </div>
+
+                          {hasCapturedInfo && (
+                            <div className="mt-3 border-t border-[#E3E6EB] pt-3" style={{ borderWidth: '0.5px' }}>
+                              <button
+                                type="button"
+                                onClick={() => toggleLeadNotes(item.id)}
+                                className="inline-flex items-center gap-2 text-[12px] font-medium text-[#4A525E]"
+                              >
+                                <span className={`inline-block transition-transform ${notesOpen ? 'rotate-90' : ''}`}>▶</span>
+                                Info capturada
+                              </button>
+
+                              {notesOpen && (
+                                <div className="mt-2 space-y-1">
+                                  {capturedInfoEntries.map((entry) => (
+                                    <p key={`${item.id}-${entry.key}`} className="text-[12px] text-[#6F7782]">
+                                      <span className="font-medium text-[#3D444F]">{entry.label}:</span> {entry.value}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </article>
                       );
                     })
