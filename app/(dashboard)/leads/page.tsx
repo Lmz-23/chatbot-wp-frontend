@@ -20,8 +20,6 @@ function extractCapturedInfoEntries(notes: unknown): CapturedInfoEntry[] {
     business_name: 'Negocio',
     businessName: 'Negocio',
     negocio: 'Negocio',
-    contact: 'Contacto',
-    contact_name: 'Contacto',
     interest: 'Interes',
     interes: 'Interes'
   };
@@ -52,8 +50,6 @@ function extractCapturedInfoEntries(notes: unknown): CapturedInfoEntry[] {
     'business_name',
     'businessName',
     'negocio',
-    'contact',
-    'contact_name',
     'interest',
     'interes'
   ];
@@ -66,8 +62,6 @@ function extractCapturedInfoEntries(notes: unknown): CapturedInfoEntry[] {
     business_name: 'business_name',
     businessName: 'business_name',
     negocio: 'business_name',
-    contact: 'contact',
-    contact_name: 'contact',
     interest: 'interest',
     interes: 'interest'
   };
