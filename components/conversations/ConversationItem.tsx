@@ -4,6 +4,8 @@ interface ConversationItemProps {
   id: string;
   name: string;
   phone?: string | null;
+  lead_name?: string | null;
+  user_phone?: string | null;
   lastMessage: string;
   requiresAttention: boolean;
   attentionType: 'customer' | 'bot' | null;
@@ -23,6 +25,8 @@ export function ConversationItem({
   id,
   name,
   phone,
+  lead_name,
+  user_phone,
   lastMessage,
   requiresAttention,
   attentionType,
@@ -37,6 +41,13 @@ export function ConversationItem({
   isHighlighted,
   onClick
 }: ConversationItemProps) {
+  const normalizedLeadName = String(lead_name || '').trim();
+  const normalizedUserPhone = String(user_phone || '').trim();
+  const displayName = normalizedLeadName || normalizedUserPhone || String(name || '').trim();
+  const secondaryPhone = normalizedLeadName
+    ? (normalizedUserPhone || String(phone || '').trim() || null)
+    : null;
+
   return (
     <button
       onClick={() => onClick(id)}
@@ -49,7 +60,7 @@ export function ConversationItem({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="font-medium text-foreground">{name}</p>
+            <p className="font-medium text-foreground">{displayName}</p>
             {requiresAttention && attentionType === 'customer' && (
               <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] font-medium ${attentionBadgeClassName || ''}`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${attentionDotClassName || ''}`} />
@@ -63,8 +74,8 @@ export function ConversationItem({
               </span>
             )}
           </div>
-          {phone && (
-            <p className="truncate text-xs text-muted-foreground">{phone}</p>
+          {secondaryPhone && (
+            <p className="truncate text-xs text-muted-foreground">{secondaryPhone}</p>
           )}
           <p className="truncate text-sm text-muted-foreground">{lastMessage}</p>
         </div>

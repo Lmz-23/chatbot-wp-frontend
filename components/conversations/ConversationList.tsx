@@ -5,6 +5,8 @@ export interface ConversationListItemData {
   id: string;
   name: string;
   phone?: string | null;
+  lead_name?: string | null;
+  user_phone?: string | null;
   lastMessage: string;
   requiresAttention: boolean;
   attentionType: 'customer' | 'bot' | null;
@@ -48,6 +50,8 @@ export function ConversationList({
           id={item.id}
           name={item.name}
           phone={item.phone}
+          lead_name={item.lead_name}
+          user_phone={item.user_phone}
           lastMessage={item.lastMessage}
           requiresAttention={item.requiresAttention}
           attentionType={item.attentionType}

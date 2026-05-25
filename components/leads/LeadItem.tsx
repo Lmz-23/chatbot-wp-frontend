@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { LeadStatus, UrgencyLevel } from '@/lib/utils/leads';
 
 export interface LeadItemViewModel {
@@ -62,13 +61,9 @@ function getConversationStatusBadge(status: string | null | undefined) {
 }
 
 function parseNotes(notes: string | null | undefined): {
-  isJson: boolean;
   entries: Array<{ key: string; label: string; value: string }>;
-  plainText: string;
 } {
-  if (!notes) {
-    return { isJson: false, entries: [], plainText: '' };
-  }
+  if (!notes) return { entries: [] };
 
   const fieldLabels: Record<string, string> = {
     client_name: 'Nombre',
@@ -80,7 +75,7 @@ function parseNotes(notes: string | null | undefined): {
   try {
     const parsed = JSON.parse(notes);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return { isJson: false, entries: [], plainText: String(notes).trim() };
+      return { entries: [] };
     }
 
     const allowedKeys = new Set(['client_name', 'business_name', 'contact', 'interest']);
@@ -93,20 +88,15 @@ function parseNotes(notes: string | null | undefined): {
       }))
       .filter((item) => item.value);
 
-    return {
-      isJson: true,
-      entries,
-      plainText: ''
-    };
+    return { entries };
   } catch {
-    return { isJson: false, entries: [], plainText: String(notes).trim() };
+    return { entries: [] };
   }
 }
 
 export function LeadItem({ item, onAdvanceStatus, onNameChange, onSaveName }: LeadItemProps) {
-  const [showNotes, setShowNotes] = useState(false);
   const parsedNotes = parseNotes(item.notes);
-  const hasNotes = parsedNotes.entries.length > 0 || !!parsedNotes.plainText;
+  const hasNotes = parsedNotes.entries.length > 0;
   const conversationBadge = getConversationStatusBadge(item.conversationStatus);
   const displayName = String(item.name || '').trim() || item.phone;
 
@@ -284,36 +274,15 @@ export function LeadItem({ item, onAdvanceStatus, onNameChange, onSaveName }: Le
 
       {/* Info Capturada Section */}
       {hasNotes && (
-        <div className="mt-4 border-t border-[#E3E6EB]" style={{ borderWidth: '0.5px' }}>
-          <button
-            type="button"
-            onClick={() => setShowNotes(!showNotes)}
-            className="mt-3 flex items-center gap-2 text-[11px] font-normal text-[#6F7782] hover:text-[#1B1D21]"
-          >
-            <span
-              className={`inline-block transition-transform ${showNotes ? 'rotate-90' : ''}`}
-              style={{ width: '12px', height: '12px' }}
-            >
-              ▶
-            </span>
-            Info capturada
-          </button>
-
-          {showNotes && (
-            <div className="mt-2 space-y-1">
-              {parsedNotes.entries.map((entry) => (
-                <p key={entry.key} className="text-[12px] text-[#3D444F]">
-                  <span className="font-medium">{entry.label}:</span> {entry.value}
-                </p>
-              ))}
-              {!parsedNotes.isJson && parsedNotes.plainText ? (
-                <p className="text-[12px] text-[#3D444F]">{parsedNotes.plainText}</p>
-              ) : null}
-              {parsedNotes.isJson && parsedNotes.entries.length === 0 && parsedNotes.plainText ? (
-                <p className="text-[12px] text-[#3D444F]">{parsedNotes.plainText}</p>
-              ) : null}
-            </div>
-          )}
+        <div className="mt-4 border-t border-[#E3E6EB] pt-3" style={{ borderWidth: '0.5px' }}>
+          <p className="text-[11px] font-normal text-[#6F7782]">Info capturada</p>
+          <div className="mt-2 space-y-1">
+            {parsedNotes.entries.map((entry) => (
+              <p key={entry.key} className="text-[12px] text-[#6F7782]">
+                <span className="font-medium text-[#3D444F]">{entry.label}:</span> {entry.value}
+              </p>
+            ))}
+          </div>
         </div>
       )}
     </article>
