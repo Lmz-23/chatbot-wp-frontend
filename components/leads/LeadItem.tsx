@@ -95,6 +95,7 @@ function parseNotes(notes: string | null | undefined): {
 }
 
 export function LeadItem({ item, onAdvanceStatus, onNameChange, onSaveName }: LeadItemProps) {
+  const [showNotes, setShowNotes] = useState(false);
   const parsedNotes = parseNotes(item.notes);
   const hasNotes = parsedNotes.entries.length > 0;
   const conversationBadge = getConversationStatusBadge(item.conversationStatus);
@@ -275,14 +276,24 @@ export function LeadItem({ item, onAdvanceStatus, onNameChange, onSaveName }: Le
       {/* Info Capturada Section */}
       {hasNotes && (
         <div className="mt-4 border-t border-[#E3E6EB] pt-3" style={{ borderWidth: '0.5px' }}>
-          <p className="text-[11px] font-normal text-[#6F7782]">Info capturada</p>
-          <div className="mt-2 space-y-1">
-            {parsedNotes.entries.map((entry) => (
-              <p key={entry.key} className="text-[12px] text-[#6F7782]">
-                <span className="font-medium text-[#3D444F]">{entry.label}:</span> {entry.value}
-              </p>
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowNotes((current) => !current)}
+            className="flex items-center gap-2 text-[11px] font-normal text-[#6F7782]"
+          >
+            <span className={`inline-block transition-transform ${showNotes ? 'rotate-90' : ''}`}>▶</span>
+            Info capturada
+          </button>
+
+          {showNotes && (
+            <div className="mt-2 space-y-1">
+              {parsedNotes.entries.map((entry) => (
+                <p key={entry.key} className="text-[12px] text-[#6F7782]">
+                  <span className="font-medium text-[#3D444F]">{entry.label}:</span> {entry.value}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </article>

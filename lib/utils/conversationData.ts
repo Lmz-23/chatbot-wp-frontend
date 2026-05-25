@@ -82,10 +82,12 @@ export function enrichConversationsWithLeads<T extends ConversationLeadAware>(
     const fallbackLead = leadLookup[toLeadPhoneKey(conv.user_phone)];
     if (!fallbackLead) return conv;
 
+    const normalizedLeadName = typeof conv.lead_name === 'string' ? conv.lead_name.trim() : '';
+
     return {
       ...conv,
       lead_id: conv.lead_id ?? fallbackLead.id,
-      lead_name: conv.lead_name ?? fallbackLead.name ?? null,
+      lead_name: normalizedLeadName || fallbackLead.name || null,
       lead_status: conv.lead_status ?? fallbackLead.status ?? null
     };
   });

@@ -50,8 +50,8 @@ export function ConversationList({
           id={item.id}
           name={item.name}
           phone={item.phone}
-          lead_name={item.lead_name}
-          user_phone={item.user_phone}
+          lead_name={item.lead_name ?? (item.phone ? item.name : null)}
+          user_phone={item.user_phone ?? item.phone ?? item.name}
           lastMessage={item.lastMessage}
           requiresAttention={item.requiresAttention}
           attentionType={item.attentionType}
