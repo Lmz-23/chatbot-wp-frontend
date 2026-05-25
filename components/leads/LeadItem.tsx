@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { LeadStatus, UrgencyLevel } from '@/lib/utils/leads';
 
 export interface LeadItemViewModel {
