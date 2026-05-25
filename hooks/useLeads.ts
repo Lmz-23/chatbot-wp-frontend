@@ -30,6 +30,23 @@ interface LeadSectionViewModel {
   items: LeadItemViewModel[];
 }
 
+function extractLeadDisplayNameFromNotes(notes?: string | null): string {
+  if (!notes) return '';
+
+  try {
+    const parsed = JSON.parse(notes);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '';
+
+    const data = parsed as Record<string, unknown>;
+    const businessName = String(data.business_name ?? '').trim();
+    const clientName = String(data.client_name ?? '').trim();
+
+    return businessName || clientName || '';
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Gestiona carga, segmentacion y actualizacion optimista del pipeline de leads.
  * @returns {object} Estado de leads, metricas y acciones para la UI.
@@ -291,14 +308,16 @@ export function useLeads() {
         const attentionLevel = attentionMeta?.attentionLevel || null;
         const urgencyLevel = attentionMeta?.urgencyLevel || null;
         const isReopened = attentionMeta?.isReopened || false;
+        const fallbackNameFromNotes = extractLeadDisplayNameFromNotes(lead.notes);
+        const preferredName = String(lead.name || '').trim() || fallbackNameFromNotes || null;
         const waitText = attentionLevel === 'customer' && attentionMeta?.responseTimeTimestamp
           ? formatShortWaitTime(new Date(attentionMeta.responseTimeTimestamp).toISOString())
           : '';
 
         return {
           id: lead.id,
-          nameOrPhone: lead.name || lead.phone,
-          name: lead.name,
+          nameOrPhone: preferredName || lead.phone,
+          name: preferredName,
           phone: lead.phone,
           status: lead.status,
           statusClassName: getStatusClasses(lead.status),

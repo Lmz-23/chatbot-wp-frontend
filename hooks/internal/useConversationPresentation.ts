@@ -129,6 +129,8 @@ export function useConversationPresentation<T extends ConversationPresentationIt
         id: conv.id,
         name: getDisplayName(conv.lead_name) || conv.user_phone,
         phone: getDisplayName(conv.lead_name) ? conv.user_phone : null,
+        lead_name: getDisplayName(conv.lead_name) || null,
+        user_phone: conv.user_phone,
         lastMessage:
           messagesByConversation[conv.id]?.[messagesByConversation[conv.id].length - 1]?.text
           || previewByConversation[conv.id]
