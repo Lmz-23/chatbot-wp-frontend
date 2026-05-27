@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from 'next/link';
 import { useAuth } from '@/hooks';
 
 export default function LoginPage() {
@@ -142,6 +143,10 @@ export default function LoginPage() {
                 {isLoading ? "Cargando..." : "Iniciar sesión"}
               </button>
             </form>
+
+            <p className="mt-4 text-center text-[12px] leading-[1.35] text-[#8B93A0] font-normal">
+              Consulta nuestra <Link href="/privacy" className="text-[#185FA5] underline">Política de Privacidad</Link>.
+            </p>
 
             <p className="mt-6 text-center text-[12px] leading-[1.35] text-[#8B93A0] font-normal">
               ¿Problemas para acceder? Contacta a tu administrador
