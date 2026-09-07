@@ -1,4 +1,4 @@
-# Replai — Web Panel
+# Web Panel
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-087EA4?logo=react&logoColor=white)
