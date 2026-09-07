@@ -139,4 +139,16 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 copilot-instruction.md
-.github\agents
+.github/agents
+
+# Vercel
+.vercel
+
+# Archives / source bundles (should never be committed)
+*.zip
+*.tar
+*.tar.gz
+
+# Database backups / dumps
+backups/
+*.dump

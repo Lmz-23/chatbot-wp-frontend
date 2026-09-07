@@ -19,7 +19,6 @@ type ProfileResponse = {
 type BusinessUser = {
   id: string;
   email: string;
-  platform_role: string;
   is_active: boolean;
   created_at: string;
   business_role?: string;
@@ -48,11 +47,19 @@ function statusBadgeClass(isActive: boolean) {
 }
 
 function toRoleType(user: BusinessUser, profile: ProfileResponse | null): RenderRole {
-  if (user.platform_role === 'PLATFORM_ADMIN') return 'PLATFORM_ADMIN';
+  // GET /api/users (listado del negocio) ya no incluye platform_role para
+  // ninguna fila (fix de seguridad en backend: un OWNER no debe poder
+  // distinguir qué miembros de su negocio son PLATFORM_ADMIN). Por eso la
+  // distinción PLATFORM_ADMIN solo se puede resolver para la fila propia,
+  // usando /auth/me (profile), que sí sigue exponiendo ese dato para uno
+  // mismo. Para el resto de filas solo se muestra OWNER/AGENT.
+  if (profile && profile.userId === user.id) {
+    if (profile.platformRole === 'PLATFORM_ADMIN') return 'PLATFORM_ADMIN';
+    if (profile.businessRole === 'OWNER') return 'OWNER';
+    return 'AGENT';
+  }
+
   if (user.business_role === 'OWNER') return 'OWNER';
-  if (user.business_role === 'AGENT') return 'AGENT';
-  if (profile && profile.userId === user.id && profile.platformRole === 'PLATFORM_ADMIN') return 'PLATFORM_ADMIN';
-  if (profile && profile.userId === user.id && profile.businessRole === 'OWNER') return 'OWNER';
   return 'AGENT';
 }
 
